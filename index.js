@@ -49,7 +49,7 @@ cron.schedule('0 0 1 * *', async () => {
                 school_local,
                 monthly_total_time,
                 RANK() OVER (ORDER BY monthly_total_time DESC) AS monthly_ranking
-            FROM school
+            FROM School
             WHERE monthly_total_time > 0
             AND MONTH(start_date) = ${lastMonth}  -- 지난달의 데이터를 필터링
         `);
@@ -62,7 +62,7 @@ cron.schedule('0 0 1 * *', async () => {
             // 해당 학교 소속 사용자 가져오기
             const users = await queryAsync(`
                 SELECT user_id
-                FROM users
+                FROM Users
                 WHERE school_id = ?
             `, [school.school_id]);
 
@@ -71,7 +71,7 @@ cron.schedule('0 0 1 * *', async () => {
                 const battleInf = `${lastMonthDateString} 전국대회 메달`; // 지역 포함 메달 정보
                 await Promise.all(users.map(user =>
                     queryAsync(`
-                        INSERT INTO medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
+                        INSERT INTO Medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         user.user_id,                // 사용자 ID
@@ -102,7 +102,7 @@ cron.schedule('0 0 1 * *', async () => {
                 school_local,
                 monthly_total_time,
                 RANK() OVER (ORDER BY monthly_total_time DESC) AS monthly_ranking
-            FROM school
+            FROM School
             WHERE monthly_total_time > 0
         `);
 
@@ -114,7 +114,7 @@ cron.schedule('0 0 1 * *', async () => {
             // 해당 학교 소속 사용자 가져오기
             const users = await queryAsync(`
                 SELECT user_id
-                FROM users
+                FROM Users
                 WHERE school_id = ?
             `, [school.school_id]);
 
@@ -123,7 +123,7 @@ cron.schedule('0 0 1 * *', async () => {
                 const battleInf = `${getDateString} 전국대회 메달`; // 지역 포함 메달 정보
                 await Promise.all(users.map(user =>
                     queryAsync(`
-                        INSERT INTO medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
+                        INSERT INTO Medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         user.user_id,                // 사용자 ID
@@ -152,7 +152,7 @@ cron.schedule('0 0 1 * *', async () => {
         console.log(`${getDateString} 메달 수여 완료 및 월간 초기화`);
 
         // 대회 시작 알림을 모든 사용자에게 전송
-        const allUsers = await queryAsync('SELECT user_id FROM users');
+        const allUsers = await queryAsync('SELECT user_id FROM Users');
         await Promise.all(allUsers.map(user =>
             queryAsync(`
                 CALL CreateNotification(?,?,'대회가 시작되었습니다!', 'system')
@@ -218,7 +218,7 @@ cron.schedule('0 0 * * *', async () => {
 
         // 남은 일수가 7일, 3일, 1일일 때 알림 발송
         if ([7, 3, 1].includes(daysLeft)) {
-            const allUsers = await queryAsync('SELECT user_id FROM users');
+            const allUsers = await queryAsync('SELECT user_id FROM Users');
             await Promise.all(allUsers.map(user =>
                 queryAsync(`
                     CALL CreateNotification(?, ?, '대회 종료까지 ${daysLeft}일 남았습니다.', 'system')
@@ -355,7 +355,7 @@ app.post('/signup', (req, res) => {
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
 
-  const query = 'SELECT * FROM users WHERE email = ? AND password = ?';
+  const query = 'SELECT * FROM Users WHERE email = ? AND password = ?';
   db.query(query, [email, password], (error, results) => {
     if (error) {
       console.error('쿼리 실행 실패:', error);
@@ -368,7 +368,7 @@ app.post('/login', (req, res) => {
 
 
       // 마지막 로그인 시간 업데이트
-      const updateQuery = 'UPDATE users SET last_login = NOW() WHERE email = ?';
+      const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
       db.query(updateQuery, [email], (updateError) => {
         if (updateError) {
           console.error('마지막 로그인 시간 업데이트 실패:', updateError);
@@ -395,7 +395,7 @@ app.post('/get-school-name', (req, res) => {
   const { userEmail } = req.body;
 
   // 쿼리 실행
-  const query = 'SELECT school_name FROM users WHERE email = ?';
+  const query = 'SELECT school_name FROM Users WHERE email = ?';
   db.query(query, [userEmail], (err, results) => {
     if (err) {
       return res.status(500).json({ message: 'Database error', error: err });
@@ -413,7 +413,7 @@ app.post('/get-school-name', (req, res) => {
 
 // 지역 목록을 반환하는 API
 app.get('/school-local', (req, res) => {
-  const query = 'SELECT DISTINCT school_local FROM school WHERE school_local IS NOT NULL';
+  const query = 'SELECT DISTINCT school_local FROM School WHERE school_local IS NOT NULL';
 
   db.query(query, (err, results) => {
     if (err) {
@@ -432,7 +432,7 @@ app.get('/school-rankings', (req, res) => {
 
   // '지역 대회' 처리
   if (competition === '지역 대회' && local) {
-      const query = 'SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local FROM school WHERE school_local = ? ORDER BY local_ranking ASC';
+      const query = 'SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local FROM School WHERE school_local = ? ORDER BY local_ranking ASC';
 
     db.query(query, local, (err, results) => {
       if (err) {
@@ -458,7 +458,7 @@ app.get('/school-rankings', (req, res) => {
                              school_level,
                              school_local,
                              ROW_NUMBER() OVER (PARTITION BY school_local ORDER BY monthly_ranking ASC) AS rn
-                           FROM school
+                           FROM School
                          )
                          SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local
                          FROM RankedSchools
@@ -480,7 +480,7 @@ app.get('/school-rankings', (req, res) => {
   // '랭킹' 대회 처리
   else if (competition === '랭킹') {
     const query = `SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local
-                   FROM school
+                   FROM School
                    ORDER BY total_ranking ASC;`;
     db.query(query, (err, results) => {
       if (err) {
@@ -505,7 +505,7 @@ app.post('/school-contributions', (req, res) => {
 
   // 사용자 이메일에 해당하는 school_name과 nickname을 가져오기 위한 쿼리
   const schoolQuery = `
-    SELECT school_name, nickname FROM users WHERE email = ?
+    SELECT school_name, nickname FROM Users WHERE email = ?
   `;
 
   db.query(schoolQuery, [userEmail], (error, schoolResults) => {
@@ -530,14 +530,14 @@ app.post('/school-contributions', (req, res) => {
     console.log('학교 이름:', schoolName, '사용자 닉네임:', userNickname);
 
     const schoolStatsQuery = `
-      SELECT total_ranking, total_time FROM school
+      SELECT total_ranking, total_time FROM School
       WHERE school_name = ?
     `;
 
     const contributionsQuery = `
       SELECT u.nickname, s.total_time
-      FROM users u
-      JOIN studytimerecords s ON u.user_id = s.user_id
+      FROM Users u
+      JOIN StudyTimeRecords s ON u.user_id = s.user_id
       WHERE u.school_name = ?
       ORDER BY s.total_time DESC
     `;
@@ -603,8 +603,8 @@ app.post('/selected-school-contributions', (req, res) => {
 
   const query = `
     SELECT u.nickname, s.total_time
-    FROM users u
-    JOIN studytimerecords s ON u.user_id = s.user_id
+    FROM Users u
+    JOIN StudyTimeRecords s ON u.user_id = s.user_id
     WHERE u.school_name = ?
     ORDER BY s.total_time DESC
   `;
@@ -635,8 +635,8 @@ app.post('/selected-school-competition', (req, res) => {
 
   const query = `
     SELECT u.nickname, s.monthly_time
-    FROM users u
-    JOIN studytimerecords s ON u.user_id = s.user_id
+    FROM Users u
+    JOIN StudyTimeRecords s ON u.user_id = s.user_id
     WHERE u.school_name = ?
     ORDER BY s.monthly_time DESC
   `;
@@ -661,7 +661,7 @@ app.post('/get-user-id', async (req, res) => {
   const { userEmail } = req.body;
   console.log(`Received request for user email: ${userEmail}`);
 
-  const query = 'SELECT user_id FROM users WHERE email = ?';
+  const query = 'SELECT user_id FROM Users WHERE email = ?';
   db.query(query, [userEmail], (err, results) => {
   if(err) {
         return res.status(404).json({ message: 'User not fount'});
@@ -680,7 +680,7 @@ app.post('/calculate-time-and-points', (req, res) => {
 
     // 1. 사용자가 속한 학교 ID 조회
     const schoolIdQuery = `
-      SELECT school_id FROM users WHERE user_id = ?
+      SELECT school_id FROM Users WHERE user_id = ?
     `;
 
     db.query(schoolIdQuery, [user_id], (err, schoolResult) => {
@@ -697,7 +697,7 @@ app.post('/calculate-time-and-points', (req, res) => {
 
         // 2. 현재 학교의 레벨을 조회
         const currentLevelQuery = `
-          SELECT school_level FROM school WHERE school_id = ?
+          SELECT school_level FROM School WHERE school_id = ?
         `;
 
         db.query(currentLevelQuery, [schoolId], (err, currentLevelResult) => {
@@ -732,7 +732,7 @@ app.post('/calculate-time-and-points', (req, res) => {
                     if (currentSchoolLevel !== updatedSchoolLevel) {
                         // 6. 해당 학교의 모든 사용자에게 알림 생성
                         const getUsersQuery = `
-                          SELECT user_id FROM users WHERE school_id = ?
+                          SELECT user_id FROM Users WHERE school_id = ?
                         `;
 
                         db.query(getUsersQuery, [schoolId], (err, userResult) => {
@@ -772,7 +772,7 @@ app.post('/get-user-medals', (req, res) => {
   const { userId } = req.body;
 
   // userId에 해당하는 메달 목록 가져오기
-  const query = 'SELECT medal_id, ranking, battle_inf FROM medal WHERE user_id = ?';
+  const query = 'SELECT medal_id, ranking, battle_inf FROM Medal WHERE user_id = ?';
 
   db.query(query, [userId], (err, results) => {
     if (err) {
@@ -800,7 +800,7 @@ app.post('/get-school-medals', (req, res) => {
                            ranking,
                            battle_inf,
                            ROW_NUMBER() OVER (PARTITION BY school_id ORDER BY medal_id) AS row_num  -- school_id별로 순위 부여
-                         FROM medal
+                         FROM Medal
                          WHERE school_id = ?
                        )
                        SELECT school_id, medal_id, ranking, battle_inf
@@ -827,7 +827,7 @@ app.post('/get-medal-info', (req, res) => {
 
   const query = `
     SELECT *
-        FROM medal m
+        FROM Medal m
         WHERE m.user_id = ? AND m.medal_id = ?
   `;
 
@@ -882,7 +882,7 @@ app.post('/get-user-nickname', (req, res) => {
   const { userId } = req.body;  // 요청 본문에서 userId를 가져옴
 
   // userId로 사용자의 닉네임을 데이터베이스에서 조회
-  const query = 'SELECT nickname FROM users WHERE user_id = ?';  // 사용자 테이블에서 닉네임 조회
+  const query = 'SELECT nickname FROM Users WHERE user_id = ?';  // 사용자 테이블에서 닉네임 조회
   db.query(query, [userId], (err, results) => {
     if (err) {
       console.error('닉네임 조회 실패:', err);
@@ -975,8 +975,8 @@ app.post('/getUserItems', (req, res) => {
 
   let query = `
     SELECT i.inventory_id, s.item_name, i.category, i.acquired_at, i.is_placed
-    FROM inventory i
-    JOIN store s ON i.item_id = s.item_id
+    FROM Inventory i
+    JOIN Store s ON i.item_id = s.item_id
     WHERE i.user_id = ?`;
 
   // 카테고리가 '전체'가 아닌 경우 필터링 추가
@@ -1024,7 +1024,7 @@ app.post('/updateItemIsPlaced', (req, res) => {
 
   // SQL 쿼리 작성 (inventory_id 사용)
   const query = `
-    UPDATE inventory
+    UPDATE Inventory
     SET is_placed = 1, x = ?, y = ?
     WHERE inventory_id = ? AND user_id = ?;
   `;
@@ -1049,8 +1049,8 @@ app.post('/get-placed-items', (req, res) => {
 
   const query = `
     SELECT i.inventory_id, s.item_name, i.x, i.y, i.priority
-    FROM inventory AS i
-    INNER JOIN store AS s ON i.item_id = s.item_id
+    FROM Inventory AS i
+    INNER JOIN Store AS s ON i.item_id = s.item_id
     WHERE i.user_id = ? AND i.is_placed = 1
   `;
 
@@ -1068,7 +1068,7 @@ app.post('/remove-item', (req, res) => {
   const { user_id, inventory_id } = req.body;
 
   const query = `
-    UPDATE inventory
+    UPDATE Inventory
     SET is_placed = 0, priority = 0
     WHERE user_id = ? AND inventory_id = ?
   `;
@@ -1093,12 +1093,12 @@ app.post('/update-item-position', async (req, res) => {
 
   try {
     await db.query(
-      `UPDATE inventory SET priority = priority + 1 WHERE user_id = ? AND inventory_id != ? AND is_placed = 1`,
+      `UPDATE Inventory SET priority = priority + 1 WHERE user_id = ? AND inventory_id != ? AND is_placed = 1`,
       [user_id, inventory_id]
     );
 
     await db.query(
-      `UPDATE inventory SET x = ?, y = ?, priority = ? WHERE user_id = ? AND inventory_id = ? AND is_placed = 1`,
+      `UPDATE Inventory SET x = ?, y = ?, priority = ? WHERE user_id = ? AND inventory_id = ? AND is_placed = 1`,
       [x, y, priority, user_id, inventory_id]
     );
 
@@ -1113,7 +1113,7 @@ app.get('/search-user', (req, res) => {
   const { nickname } = req.query;
   const userId = req.userId;  // 요청 보낸 사용자의 userId (예: 토큰에서 추출)
 
-  const query = 'SELECT user_id, nickname FROM users WHERE nickname = ?';
+  const query = 'SELECT user_id, nickname FROM Users WHERE nickname = ?';
 
   db.query(query, [nickname], (err, rows) => {
     if (err) {
@@ -1138,7 +1138,7 @@ app.get('/search-user', (req, res) => {
 app.post('/send-friend-request', (req, res) => {
   const { userId, friendNickname } = req.body;
 
-  const query = 'SELECT user_id FROM users WHERE nickname = ?';
+  const query = 'SELECT user_id FROM Users WHERE nickname = ?';
 
   db.query(query, [friendNickname], (err, rows) => {
     if (err) {
@@ -1157,7 +1157,7 @@ app.post('/send-friend-request', (req, res) => {
     }
 
     const checkRequestQuery = `
-      SELECT * FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
+      SELECT * FROM Friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
     `;
 
     db.query(checkRequestQuery, [userId, friendId, friendId, userId], (err, existingRequest) => {
@@ -1171,7 +1171,7 @@ app.post('/send-friend-request', (req, res) => {
       }
 
       const insertQuery = `
-        INSERT INTO friends (user_id, friend_id, status, created_at, updated_at)
+        INSERT INTO Friends (user_id, friend_id, status, created_at, updated_at)
         VALUES (?, ?, 'requested', NOW(), NOW())
       `;
 
@@ -1205,8 +1205,8 @@ app.get('/friend-requests/:userId', (req, res) => {
 
   const query = `
       SELECT f.friendship_id, f.user_id, f.friend_id, u.nickname
-      FROM friends f
-      JOIN users u ON f.user_id = u.user_id
+      FROM Friends f
+      JOIN Users u ON f.user_id = u.user_id
       WHERE f.friend_id = ? AND f.status = 'requested'
     `;
 
@@ -1231,7 +1231,7 @@ app.post('/accept-friend-request', (req, res) => {
 
   // 1. 친구 요청 수락 상태로 업데이트
   const query = `
-    UPDATE friends
+    UPDATE Friends
     SET status = 'accepted'
     WHERE friendship_id = ? AND status = 'requested'
   `;
@@ -1248,7 +1248,7 @@ app.post('/accept-friend-request', (req, res) => {
 
     // 2. friendship_id를 통해 상대방 user_id 가져오기
     const getUserIdQuery = `
-      SELECT user_id FROM friends
+      SELECT user_id FROM Friends
       WHERE friendship_id = ?
     `;
 
@@ -1289,7 +1289,7 @@ app.post('/reject-friend-request', (req, res) => {
   const { friendshipId } = req.body;
 
   const query = `
-    DELETE FROM friends
+    DELETE FROM Friends
     WHERE friendship_id = ? AND status = 'requested'
   `;
 
@@ -1398,8 +1398,8 @@ app.get('/friends/:userId', (req, res) => {
         ELSE f.user_id
       END AS friend_id,
       u.nickname
-    FROM friends f
-    JOIN users u ON u.user_id = (
+    FROM Friends f
+    JOIN Users u ON u.user_id = (
       CASE
         WHEN f.user_id = ? THEN f.friend_id
         ELSE f.user_id
