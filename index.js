@@ -1,875 +1,1425 @@
-drop schema checkjin_2023874;
-CREATE SCHEMA checkjin_2023874;
-use checkjin_2023874;
-
-CREATE TABLE School (
-   school_id INT AUTO_INCREMENT PRIMARY KEY,
-    school_name VARCHAR(100) NOT NULL,  # UNIQUE, 일단 중복 허용
-    monthly_total_time INT DEFAULT 0, -- 해당 학교의 월별 총 공부 시간 (분 단위)
-    total_time INT DEFAULT 0,
-    total_points INT DEFAULT 0, -- 해당 학교의 월별 총 포인트
-    total_ranking INT DEFAULT NULL,
-    monthly_ranking INT DEFAULT NULL, -- 학교 순위 (월별 대회)
-    local_ranking INT DEFAULT NULL,
-    school_level INT DEFAULT 1,
-    school_local VARCHAR(100) NULL,
-    start_date DATE,
-    end_date DATE
-);
-
-CREATE TABLE Users (
-    user_id INT AUTO_INCREMENT PRIMARY KEY, -- user 구분
-    email VARCHAR(255) NOT NULL UNIQUE, -- 아이디
-    password VARCHAR(255) NOT NULL, -- 비번
-    nickname VARCHAR(50) NOT NULL, -- 닉네임
-    school_name VARCHAR(100), -- 학교명
-    profile_image BLOB, -- 프로필 이미지
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 계정 생성 시간 기록
-    last_login TIMESTAMP NULL DEFAULT NULL, -- 마지막 로그인 시간
-    account_status ENUM('active', 'dormant', 'disabled') DEFAULT 'active',
-    school_id INT NULL,
-    points INT DEFAULT 0,
-    FOREIGN KEY (school_id) REFERENCES School(school_id) ON DELETE CASCADE
-);
-
-CREATE TABLE StudyTimeRecords (
-    record_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    record_date DATE, -- 일별 기록
-    daily_time TIME DEFAULT '00:00:00', -- 하루 누적 공부 시간
-    total_points INT DEFAULT 0, -- 포인트 저장
-    monthly_time INT DEFAULT 0, -- 시간 저장
-    total_time INT DEFAULT 0, -- 시간 저장
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
-);
-
-CREATE TABLE Medal(
-   medal_id INT auto_increment PRIMARY KEY,
-   user_id INT NOT NULL,
-    school_id INT NOT NULL,
-    school_name VARCHAR(100) NOT NULL,  # UNIQUE, 일단 중복 허용
-    ranking INT DEFAULT NULL, -- 학교 순위 (월별 대회)
-    monthly_total_time INT NULL,
-    get_date VARCHAR(100),
-    battle_inf VARCHAR(100) NULL, -- 대회 정보 (지역인지 전국인지)
-    school_local VARCHAR(10) NULL,
-   FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (school_id) REFERENCES School(school_id) ON DELETE CASCADE
-);
-
-CREATE TABLE Friends (
-    friendship_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    friend_id INT NOT NULL,
-    status ENUM('requested', 'accepted', 'blocked') DEFAULT 'requested',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (friend_id) REFERENCES Users(user_id) ON DELETE CASCADE
-);
-
-
-
-CREATE TABLE Store (
-    item_id INT AUTO_INCREMENT PRIMARY KEY,  -- 아이템 고유 ID
-    item_name VARCHAR(255) NOT NULL,          -- 아이템 이름
-    category VARCHAR(100) NOT NULL,           -- 아이템 카테고리 (예: "동물", "책상")
-    description TEXT,                         -- 아이템 설명
-    price INT NOT NULL,                       -- 아이템 가격 (포인트 단위)
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP  -- 아이템 등록일 (기본값: 현재 시간)
-);
-
-CREATE TABLE Inventory (
-    inventory_id INT AUTO_INCREMENT PRIMARY KEY,  -- 인벤토리 고유 ID
-    user_id INT NOT NULL,                         -- 사용자 ID (user 테이블의 외래 키)
-    item_id INT NOT NULL,                         -- 아이템 ID (Shop 테이블의 외래 키)
-    x DOUBLE,
-    y DOUBLE,
-    category VARCHAR(100) NOT NULL,               -- 아이템 카테고리 (예: "동물", "책상")
-    acquired_at DATETIME DEFAULT CURRENT_TIMESTAMP,  -- 아이템 획득일 (기본값: 현재 시간)
-    is_placed BOOLEAN DEFAULT FALSE,              -- 아이템이 홈에 배치되었는지 여부 (기본값: FALSE)
-    priority INT DEFAULT 0,                        -- 아이템 배치 우선 순위
-       
-    -- 외래 키 제약조건
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,  -- user 테이블의 user_id를 참조
-    FOREIGN KEY (item_id) REFERENCES Store(item_id) ON DELETE CASCADE   -- Shop 테이블의 item_id를 참조
-);
-
-CREATE TABLE Notifications (
-    notification_id INT AUTO_INCREMENT PRIMARY KEY,  -- 알림 고유 ID
-    user_id INT NOT NULL,                            -- 사용자 ID (Users 테이블의 외래 키)
-    title VARCHAR(255) NOT NULL,                    -- 알림 제목
-    message TEXT NOT NULL,                          -- 알림 내용
-    type ENUM('system', 'reward', 'friend_request', 'custom') DEFAULT 'custom', -- 알림 유형
-    is_read BOOLEAN DEFAULT FALSE,                  -- 읽음 여부 (기본값: 읽지 않음)
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 알림 생성 시간
-    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE -- 사용자와 관계 설정
-);
-
-CREATE TABLE Log (
-    log_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    message VARCHAR(255) NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-
-DROP PROCEDURE IF EXISTS CreateNotification;
-DELIMITER $$
-CREATE PROCEDURE CreateNotification(
-    IN input_user_id INT,
-    IN input_title VARCHAR(255),
-    IN input_message TEXT,
-    IN input_type ENUM('system', 'reward', 'friend_request', 'custom')
-)
-BEGIN
-    INSERT INTO Notifications (user_id, title, message, type)
-    VALUES (input_user_id, input_title, input_message, input_type);
-END$$
-DELIMITER ;
-
-DROP PROCEDURE IF EXISTS MarkNotificationAsRead;
-DELIMITER $$
-CREATE PROCEDURE MarkNotificationAsRead(
-    IN input_notification_id INT
-)
-BEGIN
-    UPDATE Notifications
-    SET is_read = TRUE
-    WHERE notification_id = input_notification_id;
-END$$
-DELIMITER ;
-
-DROP PROCEDURE IF EXISTS GetUserNotifications;
-DELIMITER $$
-CREATE PROCEDURE GetUserNotifications(
-    IN input_user_id INT
-)
-BEGIN
-    SELECT 
-        notification_id, 
-        title, 
-        message, 
-        type, 
-        is_read, 
-        created_at
-    FROM Notifications
-    WHERE user_id = input_user_id
-    ORDER BY created_at DESC;
-END$$
-DELIMITER ;
-
--- 개인 공부 시간 누적 및 포인트 계산 프로시저
-DROP PROCEDURE IF EXISTS CalculateTimeAndPoints_proc;
-DELIMITER $$
-
-CREATE PROCEDURE CalculateTimeAndPoints_proc(
-    IN input_record_time TIME, 
-    IN input_user_id INT
-)
-BEGIN
-    DECLARE total_minutes INT;
-    DECLARE new_points INT;
-    DECLARE user_school_id INT;
-
-    -- 공부 시간을 분 단위로 변환하고 포인트 계산
-    SET total_minutes = TIME_TO_SEC(input_record_time) / 60;
-    SET new_points = total_minutes * 100;
-
-    -- 사용자의 학교 이름 가져오기
-     SELECT school_id INTO user_school_id
-    FROM Users 
-    WHERE user_id = input_user_id;
-
-    -- 사용자의 일별 공부 시간과 포인트 누적
-    UPDATE StudyTimeRecords
-    SET daily_time = ADDTIME(daily_time, input_record_time),
-        total_points = total_points + new_points,
-   monthly_time = monthly_time + total_minutes,
-        total_time = total_time + total_minutes
-    WHERE user_id = input_user_id; 
-
-
-    -- 사용자의 총 포인트 누적
-    UPDATE Users
-    SET points = points + new_points
-    WHERE user_id = input_user_id;
-
-    -- 사용자의 학교가 존재하는 경우에만 월별 공부 시간 및 포인트 누적
-    IF user_school_id IS NOT NULL THEN
-        UPDATE School
-        SET monthly_total_time = monthly_total_time + total_minutes,
-            total_time = total_time + total_minutes,
-            total_points = total_points + new_points
-        WHERE school_id = user_school_id;
-
-        -- 학교별 랭킹 업데이트, 레벨 업데이트 프로시저 호출
-        CALL update_school_monthly_ranking();
-        CALL update_school_total_ranking();
-   CALL update_school_local_ranking();
-        CALL UpdateSchoolLevel();
-    END IF;
-END $$
-
-DELIMITER ;
-
--- 토탈 랭킹 업데이트
-DROP PROCEDURE IF EXISTS update_school_total_ranking;
-DELIMITER $$
-CREATE PROCEDURE update_school_total_ranking()
-BEGIN
-    -- 학교 순위 계산을 위해 임시 테이블을 생성
-    DROP TEMPORARY TABLE IF EXISTS temp_rank;
-    CREATE TEMPORARY TABLE temp_rank AS
-    SELECT 
-        s.school_id,
-        s.school_name,
-        s.total_time,
-        RANK() OVER (ORDER BY s.total_time DESC) AS school_rank
-    FROM School s;
-
-    -- 임시 테이블에서 순위를 School 테이블에 업데이트
-    UPDATE School sbr
-    JOIN temp_rank tr ON sbr.school_id = tr.school_id
-    SET sbr.total_ranking = tr.school_rank;
-
-    -- 임시 테이블 삭제
-    DROP TEMPORARY TABLE IF EXISTS temp_rank;
-END $$
-DELIMITER ;
-
--- 월별 랭킹 업데이트
-DROP PROCEDURE IF EXISTS update_school_monthly_ranking;
-DELIMITER $$
-CREATE PROCEDURE update_school_monthly_ranking()
-BEGIN
-    -- 학교 순위 계산을 위해 임시 테이블을 생성
-    DROP TEMPORARY TABLE IF EXISTS temp_rank;
-    CREATE TEMPORARY TABLE temp_rank AS
-    SELECT 
-        s.school_id,
-        s.school_name,
-        s.monthly_total_time,
-        RANK() OVER (ORDER BY s.monthly_total_time DESC) AS school_rank
-    FROM School s;
-
-    -- 임시 테이블에서 순위를 SchoolBattleRecords 테이블에 업데이트
-    UPDATE School sbr
-    JOIN temp_rank tr ON sbr.school_id = tr.school_id
-    SET sbr.monthly_ranking = tr.school_rank;
-
-    -- 임시 테이블 삭제
-    DROP TEMPORARY TABLE IF EXISTS temp_rank;
-END $$
-DELIMITER ;
-
--- 지역 랭킹 업데이트
-DROP PROCEDURE IF EXISTS update_school_local_ranking;
-DELIMITER $$
-CREATE PROCEDURE update_school_local_ranking()
-BEGIN
-    -- 지역별 순위 계산을 위해 임시 테이블 생성
-    DROP TEMPORARY TABLE IF EXISTS temp_local_rank;
-    CREATE TEMPORARY TABLE temp_local_rank AS
-    SELECT 
-        s.school_id,
-        s.school_name,
-        s.school_local,
-        s.monthly_total_time,
-        RANK() OVER (PARTITION BY s.school_local ORDER BY s.monthly_total_time DESC) AS local_rank
-    FROM School s
-    WHERE s.school_local IS NOT NULL; -- 지역 정보가 있는 경우만 처리
-
-    -- 임시 테이블에서 지역별 순위를 School 테이블에 업데이트
-    UPDATE School sbr
-    JOIN temp_local_rank tlr ON sbr.school_id = tlr.school_id
-    SET sbr.local_ranking = tlr.local_rank;
-
-     -- 임시 테이블 삭제
-    DROP TEMPORARY TABLE IF EXISTS temp_local_rank;
-END $$
-DELIMITER ;
-
-DROP PROCEDURE IF EXISTS UpdateSchoolLevel;
-DELIMITER //
-CREATE PROCEDURE UpdateSchoolLevel()
-BEGIN
-    UPDATE School
-    SET 
-        school_level = CASE
-            WHEN total_points < 600000 THEN 1
-            WHEN total_points >= 600000 AND total_points < 3000000 THEN 2       -- 100 * 600 = 60000, 500 * 600 = 240000
-            WHEN total_points >= 3000000 AND total_points < 15000000 THEN 3     -- 2500 * 600 = 1500000
-            WHEN total_points >= 15000000 AND total_points < 62500000 THEN 4    -- 12500 * 600 = 6250000
-            WHEN total_points >= 62500000 AND total_points < 255000000 THEN 5  -- 42500 * 600 = 25500000
-            WHEN total_points >= 255000000 AND total_points < 510000000 THEN 6  -- 85000 * 600 = 51000000
-            WHEN total_points >= 510000000 THEN 7
-            ELSE school_level
-        END;
-END //
-DELIMITER ;
-
-DROP PROCEDURE IF EXISTS purchaseItem;
-DELIMITER $$
-CREATE PROCEDURE purchaseItem(
-    IN input_user_id INT, 
-    IN input_item_id INT, 
-    IN input_item_price INT
-)
-BEGIN
-    DECLARE item_category VARCHAR(100);
-
-    -- 아이템의 카테고리 가져오기
-    SELECT category INTO item_category
-    FROM Store
-    WHERE item_id = input_item_id;
-
-    -- 사용자의 포인트가 충분한지 확인
-    IF (SELECT points FROM Users WHERE user_id = input_user_id) >= input_item_price THEN
-        -- 포인트 차감
-        UPDATE Users
-        SET points = points - input_item_price
-        WHERE user_id = input_user_id;
-
-        -- 인벤토리에 아이템 추가
-        INSERT INTO Inventory (user_id, item_id, category, acquired_at)
-        VALUES (input_user_id, input_item_id, item_category, NOW());
-    ELSE
-        -- 포인트 부족 시 오류 발생
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '포인트가 부족합니다.';
-    END IF;
-END$$
-DELIMITER ;
-
-
-
-START TRANSACTION;
-
--- 서울고등학교 (school_id: 1) Lv.5
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('서울고등학교', 0, 625000, 62500000, NULL, NULL, 1, '서울', '2024-01-01', NULL);
-
--- 부산고등학교 (school_id: 2) Lv.4
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('부산고등학교', 0, 150000, 15000000, NULL, NULL, 1, '부산', '2024-01-01', NULL);
-
--- 동아고등학교 (school_id: 3) Lv.6
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('동아고등학교', 0, 5098349, 509834900, NULL, NULL, 1, '부산', '2024-01-01', NULL);
-
--- 창원고등학교 (school_id: 4) Lv.7
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('창원고등학교', 0, 5100000, 510000000, NULL, NULL, 1, '창원', '2024-01-01', NULL);
-
--- 다대고등학교 (school_id: 5) Lv.1
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('다대고등학교', 0, 0, 0, NULL, NULL, 1, '부산', '2024-01-01', NULL);
-
--- 울산고등학교 (school_id: 6) Lv.2
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('울산고등학교', 0, 6000, 600000, NULL, NULL, 1, '울산', '2024-01-01', NULL);
-
--- 인천고등학교 (school_id: 7) Lv.3
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('인천고등학교', 0, 30000, 3000000, NULL, NULL, 1, '인천', '2024-01-01', NULL);
-
--- 포항고등학교 (school_id: 8) Lv.3
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('포항고등학교', 0, 30000, 3000000, NULL, NULL, 1, '포항', '2024-01-01', NULL);
-
--- 중앙고등학교 (school_id: 9) Lv.4
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('중앙고등학교', 0, 150000, 15000000, NULL, NULL, 1, '서울', '2024-01-01', NULL);
-
--- 용호고등학교 (school_id: 10) Lv.5
-INSERT INTO `School` (`school_name`, `monthly_total_time`, `total_time`, `total_points`, `total_ranking`, `monthly_ranking`, `school_level`, `school_local`, `start_date`, `end_date`)
-VALUES
-('용호고등학교', 0, 625000, 62500000, NULL, NULL, 1, '창원', '2024-01-01', NULL);
-
-
--- 서울고등학교 (school_id: 1)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user1@naver.com', '1234', 'user1', '서울고등학교', 1),  -- user1
-('user2@naver.com', '1234', 'user2', '서울고등학교', 1),  -- user2
-('user3@naver.com', '1234', 'user3', '서울고등학교', 1),  -- user3
-('user4@naver.com', '1234', 'user4', '서울고등학교', 1),  -- user4
-('user5@naver.com', '1234', 'user5', '서울고등학교', 1),  -- user5
-('user6@naver.com', '1234', 'user6', '서울고등학교', 1),  -- user6
-('user7@naver.com', '1234', 'user7', '서울고등학교', 1),  -- user7
-('user8@naver.com', '1234', 'user8', '서울고등학교', 1),  -- user8
-('user9@naver.com', '1234', 'user9', '서울고등학교', 1),  -- user9
-('user10@naver.com', '1234', 'user10', '서울고등학교', 1);  -- user10
-
--- 부산고등학교 (school_id: 2)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user11@naver.com', '1234', 'user11', '부산고등학교', 2),  -- user11
-('user12@naver.com', '1234', 'user12', '부산고등학교', 2),  -- user12
-('user13@naver.com', '1234', 'user13', '부산고등학교', 2),  -- user13
-('user14@naver.com', '1234', 'user14', '부산고등학교', 2),  -- user14
-('user15@naver.com', '1234', 'user15', '부산고등학교', 2),  -- user15
-('user16@naver.com', '1234', 'user16', '부산고등학교', 2),  -- user16
-('user17@naver.com', '1234', 'user17', '부산고등학교', 2),  -- user17
-('user18@naver.com', '1234', 'user18', '부산고등학교', 2),  -- user18
-('user19@naver.com', '1234', 'user19', '부산고등학교', 2),  -- user19
-('user20@naver.com', '1234', 'user20', '부산고등학교', 2);  -- user20
-
--- 동아고등학교 (school_id: 3)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user21@naver.com', '1234', 'user21', '동아고등학교', 3),  -- user21
-('user22@naver.com', '1234', 'user22', '동아고등학교', 3),  -- user22
-('user23@naver.com', '1234', 'user23', '동아고등학교', 3),  -- user23
-('user24@naver.com', '1234', 'user24', '동아고등학교', 3),  -- user24
-('user25@naver.com', '1234', 'user25', '동아고등학교', 3),  -- user25
-('user26@naver.com', '1234', 'user26', '동아고등학교', 3),  -- user26
-('user27@naver.com', '1234', 'user27', '동아고등학교', 3),  -- user27
-('user28@naver.com', '1234', 'user28', '동아고등학교', 3),  -- user28
-('user29@naver.com', '1234', 'user29', '동아고등학교', 3),  -- user29
-('user30@naver.com', '1234', 'user30', '동아고등학교', 3);  -- user30
-
--- 창원고등학교 (school_id: 4)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user31@naver.com', '1234', 'user31', '창원고등학교', 4),  -- user31
-('user32@naver.com', '1234', 'user32', '창원고등학교', 4),  -- user32
-('user33@naver.com', '1234', 'user33', '창원고등학교', 4),  -- user33
-('user34@naver.com', '1234', 'user34', '창원고등학교', 4),  -- user34
-('user35@naver.com', '1234', 'user35', '창원고등학교', 4),  -- user35
-('user36@naver.com', '1234', 'user36', '창원고등학교', 4),  -- user36
-('user37@naver.com', '1234', 'user37', '창원고등학교', 4),  -- user37
-('user38@naver.com', '1234', 'user38', '창원고등학교', 4),  -- user38
-('user39@naver.com', '1234', 'user39', '창원고등학교', 4),  -- user39
-('user40@naver.com', '1234', 'user40', '창원고등학교', 4);  -- user40
-
--- 다대고등학교 (school_id: 5)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user41@naver.com', '1234', 'user41', '다대고등학교', 5),  -- user41
-('user42@naver.com', '1234', 'user42', '다대고등학교', 5),  -- user42
-('user43@naver.com', '1234', 'user43', '다대고등학교', 5),  -- user43
-('user44@naver.com', '1234', 'user44', '다대고등학교', 5),  -- user44
-('user45@naver.com', '1234', 'user45', '다대고등학교', 5),  -- user45
-('user46@naver.com', '1234', 'user46', '다대고등학교', 5),  -- user46
-('user47@naver.com', '1234', 'user47', '다대고등학교', 5),  -- user47
-('user48@naver.com', '1234', 'user48', '다대고등학교', 5),  -- user48
-('user49@naver.com', '1234', 'user49', '다대고등학교', 5),  -- user49
-('user50@naver.com', '1234', 'user50', '다대고등학교', 5);  -- user50
-
--- 울산고등학교 (school_id: 6)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user51@naver.com', '1234', 'user51', '울산고등학교', 6),  -- user51
-('user52@naver.com', '1234', 'user52', '울산고등학교', 6),  -- user52
-('user53@naver.com', '1234', 'user53', '울산고등학교', 6),  -- user53
-('user54@naver.com', '1234', 'user54', '울산고등학교', 6),  -- user54
-('user55@naver.com', '1234', 'user55', '울산고등학교', 6),  -- user55
-('user56@naver.com', '1234', 'user56', '울산고등학교', 6),  -- user56
-('user57@naver.com', '1234', 'user57', '울산고등학교', 6),  -- user57
-('user58@naver.com', '1234', 'user58', '울산고등학교', 6),  -- user58
-('user59@naver.com', '1234', 'user59', '울산고등학교', 6),  -- user59
-('user60@naver.com', '1234', 'user60', '울산고등학교', 6);  -- user60
-
--- 인천고등학교 (school_id: 7)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user61@naver.com', '1234', 'user61', '인천고등학교', 7),  -- user61
-('user62@naver.com', '1234', 'user62', '인천고등학교', 7),  -- user62
-('user63@naver.com', '1234', 'user63', '인천고등학교', 7),  -- user63
-('user64@naver.com', '1234', 'user64', '인천고등학교', 7),  -- user64
-('user65@naver.com', '1234', 'user65', '인천고등학교', 7),  -- user65
-('user66@naver.com', '1234', 'user66', '인천고등학교', 7),  -- user66
-('user67@naver.com', '1234', 'user67', '인천고등학교', 7),  -- user67
-('user68@naver.com', '1234', 'user68', '인천고등학교', 7),  -- user68
-('user69@naver.com', '1234', 'user69', '인천고등학교', 7),  -- user69
-('user70@naver.com', '1234', 'user70', '인천고등학교', 7);  -- user70
-
--- 포항고등학교 (school_id: 8)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user71@naver.com', '1234', 'user71', '포항고등학교', 8),  -- user71
-('user72@naver.com', '1234', 'user72', '포항고등학교', 8),  -- user72
-('user73@naver.com', '1234', 'user73', '포항고등학교', 8),  -- user73
-('user74@naver.com', '1234', 'user74', '포항고등학교', 8),  -- user74
-('user75@naver.com', '1234', 'user75', '포항고등학교', 8),  -- user75
-('user76@naver.com', '1234', 'user76', '포항고등학교', 8),  -- user76
-('user77@naver.com', '1234', 'user77', '포항고등학교', 8),  -- user77
-('user78@naver.com', '1234', 'user78', '포항고등학교', 8),  -- user78
-('user79@naver.com', '1234', 'user79', '포항고등학교', 8),  -- user79
-('user80@naver.com', '1234', 'user80', '포항고등학교', 8);  -- user80
-
--- 중앙고등학교 (school_id: 9)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user81@naver.com', '1234', 'user81', '중앙고등학교', 9),  -- user81
-('user82@naver.com', '1234', 'user82', '중앙고등학교', 9),  -- user82
-('user83@naver.com', '1234', 'user83', '중앙고등학교', 9),  -- user83
-('user84@naver.com', '1234', 'user84', '중앙고등학교', 9),  -- user84
-('user85@naver.com', '1234', 'user85', '중앙고등학교', 9),  -- user85
-('user86@naver.com', '1234', 'user86', '중앙고등학교', 9),  -- user86
-('user87@naver.com', '1234', 'user87', '중앙고등학교', 9),  -- user87
-('user88@naver.com', '1234', 'user88', '중앙고등학교', 9),  -- user88
-('user89@naver.com', '1234', 'user89', '중앙고등학교', 9),  -- user89
-('user90@naver.com', '1234', 'user90', '중앙고등학교', 9);  -- user90
-
--- 용호고등학교 (school_id: 10)
-INSERT INTO `Users` (`email`, `password`, `nickname`, `school_name`, `school_id`)
-VALUES
-('user91@naver.com', '1234', 'user91', '용호고등학교', 10),  -- user91
-('user92@naver.com', '1234', 'user92', '용호고등학교', 10),  -- user92
-('user93@naver.com', '1234', 'user93', '용호고등학교', 10),  -- user93
-('user94@naver.com', '1234', 'user94', '용호고등학교', 10),  -- user94
-('user95@naver.com', '1234', 'user95', '용호고등학교', 10),  -- user95
-('user96@naver.com', '1234', 'user96', '용호고등학교', 10),  -- user96
-('user97@naver.com', '1234', 'user97', '용호고등학교', 10),  -- user97
-('user98@naver.com', '1234', 'user98', '용호고등학교', 10),  -- user98
-('user99@naver.com', '1234', 'user99', '용호고등학교', 10),  -- user99
-('user100@naver.com', '1234', 'user100', '용호고등학교', 10);  -- user100
-
-START TRANSACTION;
-
--- 서울고등학교 (school_id: 1)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`, `total_time`)
-VALUES
-(1, '2024-11-01', '02:30:00', 15000, 150, 62648),
-(2, '2024-11-01', '03:00:00', 18000, 180, 62648),
-(3, '2024-11-01', '01:45:00', 10500, 105, 62648),
-(4, '2024-11-01', '02:15:00', 13500, 135, 62648),
-(5, '2024-11-01', '01:30:00', 9000, 90, 62648),
-(6, '2024-11-01', '03:20:00', 20000, 200, 62648),
-(7, '2024-11-01', '02:50:00', 17000, 170, 62648),
-(8, '2024-11-01', '01:20:00', 8000, 80, 62648),
-(9, '2024-11-01', '04:00:00', 24000, 240, 62648),
-(10, '2024-11-01', '02:10:00', 13000, 130, 62648);
-
--- 부산고등학교 (school_id: 2)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`, `total_time`)
-VALUES
-(11, '2024-11-01', '02:45:00', 16500, 165,15138),
-(12, '2024-11-01', '01:40:00', 10000, 100,15138),
-(13, '2024-11-01', '03:15:00', 19500, 195,15138),
-(14, '2024-11-01', '02:20:00', 14000, 140,15138),
-(15, '2024-11-01', '01:50:00', 11000, 110,15138),
-(16, '2024-11-01', '02:10:00', 13000, 130,15138),
-(17, '2024-11-01', '01:30:00', 9000, 90,15138),
-(18, '2024-11-01', '03:10:00', 19000, 190,15138),
-(19, '2024-11-01', '02:55:00', 17500, 175,15138),
-(20, '2024-11-01', '01:25:00', 8500, 85,15138);
-
--- 동아고등학교 (school_id: 3)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`, `total_time`)
-VALUES
-(21, '2024-11-01', '03:30:00', 21000,210,255165),
-(22, '2024-11-01', '02:50:00', 17000,170,255165),
-(23, '2024-11-01', '02:00:00', 12000,120,255165),
-(24, '2024-11-01', '04:10:00', 25000, 250,255165),
-(25, '2024-11-01', '03:20:00', 20000, 200,255165),
-(26, '2024-11-01', '01:45:00', 10500, 105,255165),
-(27, '2024-11-01', '02:15:00', 13500, 135,255165),
-(28, '2024-11-01', '03:40:00', 22000, 220,255165),
-(29, '2024-11-01', '02:30:00', 15000, 150,255165),
-(30, '2024-11-01', '01:30:00', 9000, 90,255165);
-
--- 창원고등학교 (school_id: 4)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`, `total_time`)
-VALUES
-(31, '2024-11-01', '04:00:00', 24000, 240,510165),
-(32, '2024-11-01', '03:10:00', 19000, 190,510165),
-(33, '2024-11-01', '02:45:00', 16500, 165,510165),
-(34, '2024-11-01', '01:50:00', 11000, 110,510165),
-(35, '2024-11-01', '02:20:00', 14000, 140,510165),
-(36, '2024-11-01', '02:30:00', 15000, 150,510165),
-(37, '2024-11-01', '03:30:00', 21000, 210,510165),
-(38, '2024-11-01', '02:10:00', 13000, 130,510165),
-(39, '2024-11-01', '01:30:00', 9000, 90,510165),
-(40, '2024-11-01', '03:45:00', 22500, 225,510165);
-
--- 다대고등학교 (school_id: 5)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`,`total_time`)
-VALUES
-(41, '2024-11-01', '01:40:00', 10000, 100, 141),
-(42, '2024-11-01', '02:55:00', 17500, 175, 141),
-(43, '2024-11-01', '03:15:00', 19500, 195, 141),
-(44, '2024-11-01', '02:20:00', 14000, 140, 141),
-(45, '2024-11-01', '02:10:00', 13000, 130, 141),
-(46, '2024-11-01', '01:45:00', 10500, 105, 141),
-(47, '2024-11-01', '03:00:00', 18000, 180, 141),
-(48, '2024-11-01', '02:25:00', 14500, 145, 141),
-(49, '2024-11-01', '02:40:00', 16000, 160, 141),
-(50, '2024-11-01', '01:20:00', 8000, 80, 141);
-
--- 울산고등학교 (school_id: 6)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`,`total_time`)
-VALUES
-(51, '2024-11-01', '02:50:00', 17000, 170, 753),
-(52, '2024-11-01', '02:15:00', 13500, 135, 753),
-(53, '2024-11-01', '03:10:00', 19000, 190, 753),
-(54, '2024-11-01', '01:45:00', 10500, 105, 753),
-(55, '2024-11-01', '03:30:00', 21000, 210, 753),
-(56, '2024-11-01', '04:00:00', 24000, 240, 753),
-(57, '2024-11-01', '02:00:00', 12000, 120, 753),
-(58, '2024-11-01', '01:30:00', 9000, 90, 753),
-(59, '2024-11-01', '02:25:00', 14500, 145, 753),
-(60, '2024-11-01', '02:05:00', 12500, 125, 753);
-
--- 인천고등학교 (school_id: 7)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`,`monthly_time`, `total_time`)
-VALUES
-(61, '2024-11-01', '03:00:00', 18000, 180, 3157),
-(62, '2024-11-01', '02:30:00', 15000, 150, 3157),
-(63, '2024-11-01', '01:50:00', 11000, 110, 3157),
-(64, '2024-11-01', '03:40:00', 22000, 220, 3157),
-(65, '2024-11-01', '02:15:00', 13500, 135, 3157),
-(66, '2024-11-01', '04:10:00', 25000, 250, 3157),
-(67, '2024-11-01', '02:50:00', 17000, 170, 3157),
-(68, '2024-11-01', '01:30:00', 9000, 90, 3157),
-(69, '2024-11-01', '02:05:00', 12500, 125, 3157),
-(70, '2024-11-01', '02:20:00', 14000, 140, 3157);
-
--- 포항고등학교 (school_id: 8)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`,`monthly_time`, `total_time`)
-VALUES
-(71, '2024-11-01', '02:10:00', 13000, 130, 3149),
-(72, '2024-11-01', '03:20:00', 20000, 200, 3149),
-(73, '2024-11-01', '01:50:00', 11000, 110, 3149),
-(74, '2024-11-01', '03:00:00', 18000, 180, 3149),
-(75, '2024-11-01', '02:45:00', 16500, 165, 3149),
-(76, '2024-11-01', '01:40:00', 10000, 100, 3149),
-(77, '2024-11-01', '03:50:00', 23000, 230, 3149),
-(78, '2024-11-01', '02:30:00', 15000, 150, 3149),
-(79, '2024-11-01', '02:20:00', 14000, 140, 3149),
-(80, '2024-11-01', '01:25:00', 8500, 85, 3149);
-
--- 중앙고등학교 (school_id: 9)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`,`total_time`)
-VALUES
-(81, '2024-11-01', '04:00:00', 24000, 240, 15155),
-(82, '2024-11-01', '02:20:00', 14000, 140, 15155),
-(83, '2024-11-01', '01:50:00', 11000, 110, 15155),
-(84, '2024-11-01', '03:30:00', 21000, 210, 15155),
-(85, '2024-11-01', '02:40:00', 16000, 160, 15155),
-(86, '2024-11-01', '02:00:00', 12000, 120, 15155),
-(87, '2024-11-01', '03:00:00', 18000, 180, 15155),
-(88, '2024-11-01', '02:25:00', 14500, 145, 15155),
-(89, '2024-11-01', '02:50:00', 17000, 170, 15155),
-(90, '2024-11-01', '01:15:00', 7500, 75, 15155);
-
--- 용호고등학교 (school_id: 10)
-INSERT INTO `StudyTimeRecords` (`user_id`, `record_date`, `daily_time`, `total_points`, `monthly_time`,`total_time`)
-VALUES
-(91, '2024-11-01', '03:10:00', 19000, 190, 62658),
-(92, '2024-11-01', '02:50:00', 17000, 170, 62658),
-(93, '2024-11-01', '01:45:00', 10500, 105, 62658),
-(94, '2024-11-01', '02:40:00', 16000, 160, 62658),
-(95, '2024-11-01', '03:25:00', 20500, 205, 62658),
-(96, '2024-11-01', '02:15:00', 13500, 135, 62658),
-(97, '2024-11-01', '02:30:00', 15000, 150, 62658),
-(98, '2024-11-01', '04:00:00', 24000, 240, 62658),
-(99, '2024-11-01', '01:35:00', 9500, 95, 62658),
-(100, '2024-11-01', '02:10:00', 13000, 130, 62658);
-
-COMMIT;
-
--- 각 학교의 monthly_total_time 업데이트 (학교별 total_time 합산)
--- 서울고등학교 (school_id: 1)
-UPDATE `School` 
-SET `monthly_total_time` = 150 + 180 + 105 + 135 + 90 + 200 + 170 + 80 + 240 + 130,
-    `total_time` =  625000 + 150 + 180 + 105 + 135 + 90 + 200 + 170 + 80 + 240 + 130,
-    `total_points` = 62500000 + (150 * 100) + (180 * 100) + (105 * 100) + (135 * 100) + (90 * 100) + (200 * 100) + (170 * 100) + (80 * 100) + (240 * 100) + (130 * 100)
-WHERE `school_id` = 1;
-
--- 부산고등학교 (school_id: 2)
-UPDATE `School` 
-SET `monthly_total_time` = 165 + 100 + 195 + 140 + 110 + 130 + 90 + 190 + 175 + 85,
-    `total_time` = 150000 + 165 + 100 + 195 + 140 + 110 + 130 + 90 + 190 + 175 + 85,
-    `total_points` = 15000000 + (165 * 100) + (100 * 100) + (195 * 100) + (140 * 100) + (110 * 100) + (130 * 100) + (90 * 100) + (190 * 100) + (175 * 100) + (85 * 100)
-WHERE `school_id` = 2;
-
--- 동아고등학교 (school_id: 3)
-UPDATE `School` 
-SET `monthly_total_time` = 210 + 170 + 120 + 250 + 200 + 105 + 135 + 220 + 150 + 90,
-    `total_time` =  2550000 + 210 + 170 + 120 + 250 + 200 + 105 + 135 + 220 + 150 + 90,
-    `total_points` =  509834900 + (210 * 100) + (170 * 100) + (120 * 100) + (250 * 100) + (200 * 100) + (105 * 100) + (135 * 100) + (220 * 100) + (150 * 100) + (90 * 100)
-WHERE `school_id` = 3;
-
--- 창원고등학교 (school_id: 4)
-UPDATE `School` 
-SET `monthly_total_time` = 240 + 190 + 165 + 110 + 140 + 150 + 210 + 130 + 90 + 225,
-    `total_time` = 5100000 + 240 + 190 + 165 + 110 + 140 + 150 + 210 + 130 + 90 + 225,
-    `total_points` = 510000000 + (240 * 100) + (190 * 100) + (165 * 100) + (110 * 100) + (140 * 100) + (150 * 100) + (210 * 100) + (130 * 100) + (90 * 100) + (225 * 100)
-WHERE `school_id` = 4;
-
--- 다대고등학교 (school_id: 5)
-UPDATE `School` 
-SET `monthly_total_time` = 100 + 175 + 195 + 140 + 130 + 105 + 180 + 145 + 160 + 80,
-    `total_time` = 100 + 175 + 195 + 140 + 130 + 105 + 180 + 145 + 160 + 80,
-    `total_points` = (100 * 100) + (175 * 100) + (195 * 100) + (140 * 100) + (130 * 100) + (105 * 100) + (180 * 100) + (145 * 100) + (160 * 100) + (80 * 100)
-WHERE `school_id` = 5;
-
--- 울산고등학교 (school_id: 6)
-UPDATE `School` 
-SET `monthly_total_time` = 170 + 135 + 190 + 105 + 210 + 240 + 120 + 90 + 145 + 125,
-    `total_time` =  6000 + 170 + 135 + 190 + 105 + 210 + 240 + 120 + 90 + 145 + 125,
-    `total_points` =  600000 + (170 * 100) + (135 * 100) + (190 * 100) + (105 * 100) + (210 * 100) + (240 * 100) + (120 * 100) + (90 * 100) + (145 * 100) + (125 * 100)
-WHERE `school_id` = 6;
-
--- 인천고등학교 (school_id: 7)
-UPDATE `School` 
-SET `monthly_total_time` = 180 + 150 + 110 + 220 + 135 + 250 + 170 + 90 + 125 + 140,
-    `total_time` = 30000 + 180 + 150 + 110 + 220 + 135 + 250 + 170 + 90 + 125 + 140,
-    `total_points` = 3000000 + (180 * 100) + (150 * 100) + (110 * 100) + (220 * 100) + (135 * 100) + (250 * 100) + (170 * 100) + (90 * 100) + (125 * 100) + (140 * 100)
-WHERE `school_id` = 7;
-
--- 포항고등학교 (school_id: 8)
-UPDATE `School` 
-SET `monthly_total_time` = 130 + 200 + 110 + 180 + 165 + 100 + 230 + 150 + 140 + 85,
-    `total_time` = 30000 + 130 + 200 + 110 + 180 + 165 + 100 + 230 + 150 + 140 + 85,
-    `total_points` = 3000000 + (130 * 100) + (200 * 100) + (110 * 100) + (180 * 100) + (165 * 100) + (100 * 100) + (230 * 100) + (150 * 100) + (140 * 100) + (85 * 100)
-WHERE `school_id` = 8;
-
--- 중앙고등학교 (school_id: 9)
-UPDATE `School` 
-SET `monthly_total_time` = 240 + 140 + 110 + 210 + 160 + 120 + 180 + 145 + 170 + 75,
-    `total_time` = 150000 + 240 + 140 + 110 + 210 + 160 + 120 + 180 + 145 + 170 + 75,
-    `total_points` = 15000000 + (240 * 100) + (140 * 100) + (110 * 100) + (210 * 100) + (160 * 100) + (120 * 100) + (180 * 100) + (145 * 100) + (170 * 100) + (75 * 100)
-WHERE `school_id` = 9;
-
--- 용호고등학교 (school_id: 10)
-UPDATE `School` 
-SET `monthly_total_time` = 190 + 170 + 105 + 160 + 205 + 135 + 150 + 240 + 95 + 130,
-    `total_time` = 625000 + 190 + 170 + 105 + 160 + 205 + 135 + 150 + 240 + 95 + 130,
-    `total_points` = 62500000 + (190 * 100) + (170 * 100) + (105 * 100) + (160 * 100) + (205 * 100) + (135 * 100) + (150 * 100) + (240 * 100) + (95 * 100) + (130 * 100)
-WHERE `school_id` = 10;
-
-COMMIT;
-
-INSERT INTO Medal(user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
-VALUES
-(20, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(21, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(22, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(23, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(24, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(25, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(26, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(27, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(28, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(29, 3, '동아고등학교', 1, 1651, '2024년 10월', '2024년 10월 전국 대회 메달', '부산'),
-(31, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(32, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(33, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(34, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(35, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(36, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(37, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(38, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(39, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(40, 4, '창원고등학교', 2, 1650, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(91, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(92, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(93, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(94, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(95, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(96, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(97, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(98, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(99, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(100, 10, '용호고등학교', 3, 1580, '2024년 10월', '2024년 10월 전국 대회 메달', '창원'),
-(1, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(2, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(3, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(4, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(5, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(6, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(7, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(8, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(9, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울'),
-(10, 1, '서울고등학교', 1, 2000, '2024년 9월', '2024년 9월 전국 대회 메달', '서울');
-
-INSERT INTO Store (item_name, category, description, price)
-VALUES
--- 가구 카테고리
-('책상1', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('책상2', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('책상3', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('책상4', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('책상5', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('책상6', '가구', '튼튼하고 넉넉한 크기의 나무 책상', 500),
-('의자1', '가구', '오랜 시간 앉아도 편안한 등받이 의자', 300),
-('의자2', '가구', '오랜 시간 앉아도 편안한 등받이 의자', 300),
-('의자3', '가구', '오랜 시간 앉아도 편안한 등받이 의자', 300),
-('의자4', '가구', '오랜 시간 앉아도 편안한 등받이 의자', 300),
-('둥근어항','가구','둥근어항',300),
-('각진어항','가구','각진어항',300),
-('눈사람','가구','눈사람',300),
-
-
--- 조명 카테고리
-('조명1', '조명', '따뜻하고 밝은 빛을 제공하는 LED 천장 전등', 250),
-('조명2', '조명', '각도 조절이 가능한 스탠드형 조명', 200),
-('조명3', '조명', '에너지 효율적인 LED 천장 전등', 250),
-('조명4', '조명', '책상용으로 적합한 스탠드형 조명', 200),
-
--- 식물 카테고리
-('금전수', '식물', '풍요와 행운을 상징하는 금전수 화분', 150),
-('산세베리아', '식물', '공기 정화에 탁월한 산세베리아', 180),
-('카랑코에', '식물', '밝고 생기 있는 카랑코에 화분', 300),
-('로즈마리', '식물', '은은한 향이 나는 허브 로즈마리', 150),
-('스투키', '식물', '키우기 쉬운 실내 장식용 스투키', 180),
-('크루시아', '식물', '세련된 잎을 가진 크루시아 화분', 300),
-('개운죽', '식물', '행운과 희망을 상징하는 개운죽 화분', 150),
-('몬스테라', '식물', '트렌디한 잎사귀로 인기 있는 몬스테라', 180),
-('스킨답서스', '식물', '매력적인 덩굴 식물 스킨답서스', 300),
-('애플민트', '식물', '청량한 향기를 제공하는 애플민트', 300),
-('황금세덤', '식물', '황금빛 잎사귀가 돋보이는 황금세덤', 150),
-('라벤더', '식물', '향기롭고 차분한 분위기를 만드는 라벤더', 180),
-('허브', '식물', '다양한 요리에 활용할 수 있는 허브 화분', 300),
-
--- 동물 카테고리
-('강아지', '동물', '활발하고 귀여운 강아지 장식', 400),
-('고양이', '동물', '우아하고 사랑스러운 고양이 장식', 350),
-('토끼', '동물', '작고 사랑스러운 토끼 장식', 300),
-('뱀', '동물', '독특하고 신비로운 뱀 장식', 400),
-('고슴도치', '동물', '뾰족한 가시가 매력적인 고슴도치 장식', 350),
-('호랑이', '동물', '강렬하고 용맹스러운 호랑이 장식', 300),
-('재규어', '동물', '날렵하고 강력한 재규어 장식', 400),
-('드래곤', '동물', '판타지 속에서 온 멋진 드래곤 장식', 350),
-('햄스터', '동물', '작고 귀여운 햄스터 장식', 350),
-('앵무새', '동물', '다채로운 색상의 앵무새 장식', 300),
-('독수리', '동물', '날개를 펼치고 나는 용맹한 독수리 장식', 400),
-('펭귄', '동물', '얼음 위에서 춤추는 귀여운 펭귄 장식', 350),
-('팬더', '동물', '사랑스럽고 평화로운 팬더 장식', 300);
-
-
-SELECT get_date, ranking, school_name, monthly_total_time
-        FROM Medal
-        WHERE user_id = 1;
-
-call update_school_total_ranking();
-call update_school_monthly_ranking();
-call update_school_local_ranking();
-call UpdateSchoolLevel();
-   
-COMMIT;
-
-select * from Users where user_id = 1;
-select * from Medal where user_id = 1;
-UPDATE Users
-SET points = 1000
-WHERE user_id = 1;
-
-select * from Notifications;
-select * from Log;
-
-Update Users set points = 10000 where user_id = '1';
-Update Users set points = 10000 where user_id = '2';
+//npm install node-cron
+const express = require('express');
+const mysql = require('mysql');
+const bodyParser = require('body-parser');
+const cron = require('node-cron');
+
+const app = express();
+const port = 15023;
+
+// MySQL 연결 설정
+const db = mysql.createConnection({
+    host: '0.0.0.0',
+    user: 'checkjin_2023874', // MySQL 사용자명
+    password: 'checkjin_2023874', // MySQL 비밀번호
+    database: 'checkjin_2023874', // 사용할 데이터베이스
+    multipleStatements: true // 여기에 추가
+});
+
+// MySQL 연결
+db.connect((err) => {
+    if (err) throw err;
+    console.log('Connected to MySQL database');
+});
+
+// 미들웨어 설정
+app.use(bodyParser.json());
+app.use(express.json());
+
+// 월간 초기화 및 메달 수여 작업 (매월 1일 0시 실행)
+cron.schedule('0 0 1 * *', async () => {
+    try {
+        // 현재 날짜에서 현재 달 계산
+        const { month, year } = getCurrentMonth(); // 현재 달 메달 수여
+        const getDateString = `${year}년 ${month}월`; // 예: "2024년 1월"
+
+        // 대회 시작일(start_date)과 종료일(end_date) 계산 (현재 달)
+        const startDate = new Date(year, month - 1, 1);  // 현재 달의 1일
+        const endDate = new Date(year, month, 0);        // 현재 달의 마지막 날 (예: 12월 31일)
+
+        // 지난달 계산
+        const { lastMonth, lastYear } = getLastMonth(); // 지난달 계산
+        const lastMonthDateString = `${lastYear}년 ${lastMonth}월`;
+
+        // 지난달의 메달 수여 (RANK() 사용)
+        const topSchoolsLastMonth = await queryAsync(`
+            SELECT
+                school_id,
+                school_name,
+                school_local,
+                monthly_total_time,
+                RANK() OVER (ORDER BY monthly_total_time DESC) AS monthly_ranking
+            FROM school
+            WHERE monthly_total_time > 0
+            AND MONTH(start_date) = ${lastMonth}  -- 지난달의 데이터를 필터링
+        `);
+
+        // 지난달 메달 수여: 순위에 따라 메달 부여
+        for (const school of topSchoolsLastMonth) {
+            const ranking = school.monthly_ranking; // RANK()로 계산된 순위 사용
+            if (ranking > 3) break; // 4등 이상은 메달 수여 제외
+
+            // 해당 학교 소속 사용자 가져오기
+            const users = await queryAsync(`
+                SELECT user_id
+                FROM users
+                WHERE school_id = ?
+            `, [school.school_id]);
+
+            // 사용자에게 메달 부여
+            if (users.length > 0) {
+                const battleInf = `${lastMonthDateString} 전국대회 메달`; // 지역 포함 메달 정보
+                await Promise.all(users.map(user =>
+                    queryAsync(`
+                        INSERT INTO medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        user.user_id,                // 사용자 ID
+                        school.school_id,            // 학교 ID
+                        school.school_name,          // 학교 이름
+                        ranking,                     // 순위
+                        school.monthly_total_time,   // 월간 총 시간
+                        lastMonthDateString,         // 메달 수여 날짜 (ex. "2024년 1월")
+                        battleInf,                   // "월 전국대회 메달" 형식의 정보
+                        school.school_local
+                    ])
+                ));
+
+                // 메달 수여 알림 생성
+                await Promise.all(users.map(user =>
+                    queryAsync(`
+                        CALL CreateNotification(?, ?, '대회 메달을 수여 받았습니다!', 'reward')
+                    `, [user.user_id, `${lastMonthDateString} 메달 수여`])
+                ));
+            }
+        }
+
+        // 현재 달의 RANK() 사용하여 월간 순위 계산
+        const topSchools = await queryAsync(`
+            SELECT
+                school_id,
+                school_name,
+                school_local,
+                monthly_total_time,
+                RANK() OVER (ORDER BY monthly_total_time DESC) AS monthly_ranking
+            FROM school
+            WHERE monthly_total_time > 0
+        `);
+
+        // 메달 수여: 순위에 따라 메달 부여
+        for (const school of topSchools) {
+            const ranking = school.monthly_ranking; // RANK()로 계산된 순위 사용
+            if (ranking > 3) break; // 4등 이상은 메달 수여 제외
+
+            // 해당 학교 소속 사용자 가져오기
+            const users = await queryAsync(`
+                SELECT user_id
+                FROM users
+                WHERE school_id = ?
+            `, [school.school_id]);
+
+            // 사용자에게 메달 부여
+            if (users.length > 0) {
+                const battleInf = `${getDateString} 전국대회 메달`; // 지역 포함 메달 정보
+                await Promise.all(users.map(user =>
+                    queryAsync(`
+                        INSERT INTO medal (user_id, school_id, school_name, ranking, monthly_total_time, get_date, battle_inf, school_local)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        user.user_id,                // 사용자 ID
+                        school.school_id,            // 학교 ID
+                        school.school_name,          // 학교 이름
+                        ranking,                     // 순위
+                        school.monthly_total_time,   // 월간 총 시간
+                        getDateString,               // 메달 수여 날짜 (ex. "2024년 1월")
+                        battleInf,                   // "월 전국대회 메달" 형식의 정보
+                        school.school_local
+                    ])
+                ));
+
+                // 메달 수여 알림 생성
+                await Promise.all(users.map(user =>
+                    queryAsync(`
+                        CALL CreateNotification(?, ?, '대회 메달을 수여 받았습니다!', 'reward')
+                    `, [user.user_id, `${getDateString} 메달 수여`])
+                ));
+            }
+        }
+
+        // monthly_total_time 초기화
+        await queryAsync('UPDATE School SET monthly_total_time = 0');
+
+        console.log(`${getDateString} 메달 수여 완료 및 월간 초기화`);
+
+        // 대회 시작 알림을 모든 사용자에게 전송
+        const allUsers = await queryAsync('SELECT user_id FROM users');
+        await Promise.all(allUsers.map(user =>
+            queryAsync(`
+                CALL CreateNotification(?,?,'대회가 시작되었습니다!', 'system')
+            `, [user.user_id, `${getDateString} 대회 시작`])
+        ));
+
+        // 대회 시작일(start_date)과 종료일(end_date) 업데이트
+        await queryAsync(`
+            UPDATE School
+                SET start_date = ?, end_date = ?
+        `, [startDate, endDate]);
+
+        console.log(`대회 시작일과 종료일이 업데이트되었습니다: ${startDate} ~ ${endDate}`);
+
+    } catch (error) {
+        console.error('월간 초기화 오류:', error);
+    }
+});
+
+// 현재 달 계산 함수
+function getCurrentMonth() {
+    const now = new Date();
+    const month = now.getMonth() + 1; // 0 = 1월, 11 = 12월
+    const year = now.getFullYear(); // 현재 연도
+    return { month, year };
+}
+
+// 지난달 계산 함수
+function getLastMonth() {
+    const now = new Date();
+    let month = now.getMonth(); // 0 = 1월, 11 = 12월
+    let year = now.getFullYear();
+
+    if (month === 0) {
+        month = 12;
+        year -= 1;
+    }
+
+    return { lastMonth: month, lastYear: year };
+}
+
+// Promise 기반으로 MySQL 쿼리 실행
+function queryAsync(query, params = []) {
+    return new Promise((resolve, reject) => {
+        db.query(query, params, (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+        });
+    });
+}
+
+// 대회 종료일을 기준으로 7일, 3일, 1일 남았을 때 알림 발송
+cron.schedule('0 0 * * *', async () => {
+    try {
+        // 대회 종료일 계산 (예: endDate가 대회 종료일이라고 가정)
+        const { month, year } = getCurrentMonth();
+        const endDate = new Date(year, month, 0); // 대회 종료일 (매달 마지막 날)
+
+        // 대회 종료일까지 남은 일수 계산
+        const today = new Date();
+        const timeDiff = endDate.getTime() - today.getTime();
+        const daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+        // 남은 일수가 7일, 3일, 1일일 때 알림 발송
+        if ([7, 3, 1].includes(daysLeft)) {
+            const allUsers = await queryAsync('SELECT user_id FROM users');
+            await Promise.all(allUsers.map(user =>
+                queryAsync(`
+                    CALL CreateNotification(?, ?, '대회 종료까지 ${daysLeft}일 남았습니다.', 'system')
+                `, [user.user_id, `${daysLeft}일 남음`])
+            ));
+            console.log(`${daysLeft}일 남음 알림 발송 완료`);
+        }
+
+    } catch (error) {
+        console.error('대회 종료 알림 발송 오류:', error);
+    }
+});
+
+// 현재 달 계산 함수 (기존 유지)
+function getCurrentMonth() {
+    const now = new Date();
+    const month = now.getMonth() + 1; // 0 = 1월, 11 = 12월
+    const year = now.getFullYear(); // 현재 연도
+    return { month, year };
+}
+
+
+
+// 학교 검색 API
+app.get('/search-schools', (req, res) => {
+  const query = req.query.query; // 클라이언트에서 보낸 검색어
+
+  if (!query) {
+    console.log("Query parameter missing."); // 디버깅 메시지
+    return res.status(400).json({ error: 'Query parameter is required.' });
+  }
+
+  // SQL LIKE 연산자를 사용해 검색
+  const sql = `SELECT school_name FROM School WHERE school_name LIKE CONCAT('%', ?, '%')`;
+  const searchValue = `${query}`;
+
+  db.query(sql, [searchValue], (err, results) => {
+    if (err) {
+      console.error('Error fetching schools:', err);
+      return res.status(500).json({ error: 'Failed to fetch schools.' });
+    }
+
+    // 결과를 서버 콘솔에 출력
+    console.log('Search results:', results);
+
+    // 결과 반환
+    res.json(results);
+  });
+});
+
+app.post('/signup', (req, res) => {
+    const { email, password, nickname, school_name } = req.body;
+
+    // 필수 항목 체크
+    if (!email || !password || !nickname || !school_name) {
+        return res.status(400).json({ message: 'Email, password, nickname, and school_name are required' });
+    }
+
+    // 트랜잭션 시작
+    db.beginTransaction((err) => {
+        if (err) return res.status(500).json({ message: 'Transaction start error' });
+
+        // 이메일, 닉네임 중복 확인
+        db.query('SELECT email FROM Users WHERE email = ?', [email], (err, result) => {
+            if (err) {
+                db.rollback();
+                return res.status(500).json({ message: 'Error checking email' });
+            }
+            if (result.length > 0) {
+                db.rollback();
+                return res.status(400).json({ message: 'Email is already taken' });
+            }
+
+            // 닉네임 중복 확인
+            db.query('SELECT nickname FROM Users WHERE nickname = ?', [nickname], (err, result) => {
+                if (err) {
+                    db.rollback();
+                    return res.status(500).json({ message: 'Error checking nickname' });
+                }
+                if (result.length > 0) {
+                    db.rollback();
+                    return res.status(400).json({ message: 'Nickname is already taken' });
+                }
+
+                // 기존에 school_name이 있는지 확인
+                db.query('SELECT school_id FROM School WHERE school_name = ?', [school_name], (err, result) => {
+                    if (err) {
+                        db.rollback();
+                        return res.status(500).json({ message: 'Error checking existing school' });
+                    }
+
+                    if (result.length === 0) {
+                        db.rollback();
+                        return res.status(404).json({ message: 'School does not exist' });
+                    }
+
+                    const school_id = result[0].school_id;
+
+                    // Users 테이블에 데이터 삽입
+                    const query = `INSERT INTO Users (email, password, nickname, school_name, account_status, school_id) VALUES (?, ?, ?, ?, 'active', ?)`;
+                    db.query(query, [email, password, nickname, school_name, school_id], (err, result) => {
+                        if (err) {
+                            db.rollback();
+                            return res.status(500).json({ message: 'Error creating user' });
+                        }
+
+                        const userId = result.insertId;
+
+                        // StudyTimeRecords 테이블 초기화
+                        db.query(`INSERT INTO StudyTimeRecords (user_id) VALUES (?)`, [userId], (err) => {
+                            if (err) {
+                                db.rollback();
+                                return res.status(500).json({ message: 'Error initializing StudyTimeRecords' });
+                            }
+
+                            // 트랜잭션 커밋
+                            db.commit((err) => {
+                                if (err) {
+                                    db.rollback();
+                                    return res.status(500).json({ message: 'Transaction commit error' });
+                                }
+                                res.status(201).json({ message: 'User registered successfully' });
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
+
+
+// 로그인 엔드포인트
+app.post('/login', (req, res) => {
+  const { email, password } = req.body;
+
+  const query = 'SELECT * FROM users WHERE email = ? AND password = ?';
+  db.query(query, [email, password], (error, results) => {
+    if (error) {
+      console.error('쿼리 실행 실패:', error);
+      return res.status(500).json({ message: '서버 오류' });
+    }
+
+    if (results.length > 0) {
+      const user = results[0];
+      console.log(`로그인 성공: ${email}`);
+
+
+      // 마지막 로그인 시간 업데이트
+      const updateQuery = 'UPDATE users SET last_login = NOW() WHERE email = ?';
+      db.query(updateQuery, [email], (updateError) => {
+        if (updateError) {
+          console.error('마지막 로그인 시간 업데이트 실패:', updateError);
+          return res.status(500).json({ message: '서버 오류' });
+        }
+      });
+
+       console.log('Returned user_id:', user.user_id);
+
+      // 사용자 ID를 응답으로 반환
+      return res.status(200).json({
+      user_id: user.user_id,
+      nickname: user.nickname,
+      message: '로그인 성공', userId: user.email });
+    } else {
+      console.log(`로그인 실패: 잘못된 자격 증명 ${email}`);
+      return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
+    }
+  });
+});
+
+// get-school-name 엔드포인트
+app.post('/get-school-name', (req, res) => {
+  const { userEmail } = req.body;
+
+  // 쿼리 실행
+  const query = 'SELECT school_name FROM users WHERE email = ?';
+  db.query(query, [userEmail], (err, results) => {
+    if (err) {
+      return res.status(500).json({ message: 'Database error', error: err });
+    }
+
+    if (results.length > 0) {
+      // 이메일에 해당하는 학교 이름이 존재하면 반환
+      res.status(200).json({ school_name: results[0].school_name });
+    } else {
+      // 해당하는 사용자 없음
+      res.status(404).json({ message: 'User not found' });
+    }
+  });
+});
+
+// 지역 목록을 반환하는 API
+app.get('/school-local', (req, res) => {
+  const query = 'SELECT DISTINCT school_local FROM school WHERE school_local IS NOT NULL';
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('Error fetching regions: ', err);
+      res.status(500).send('Server error');
+      return;
+    }
+
+    const locals = results.map((row) => row.school_local);
+    res.json(locals);
+  });
+});
+
+app.get('/school-rankings', (req, res) => {
+  const { competition, local } = req.query;
+
+  // '지역 대회' 처리
+  if (competition === '지역 대회' && local) {
+      const query = 'SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local FROM school WHERE school_local = ? ORDER BY local_ranking ASC';
+
+    db.query(query, local, (err, results) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: '데이터베이스 쿼리 오류' });
+      }
+      console.log('지역 대회');
+      console.log(results);
+      return res.json(results);
+    });
+  }
+
+  // '전국 대회' 처리
+  else if (competition === '전국 대회') {
+    const query = `WITH RankedSchools AS (
+                           SELECT
+                             school_name,
+                             total_ranking,
+                             monthly_ranking,
+                             local_ranking,
+                             total_time,
+                             monthly_total_time,
+                             school_level,
+                             school_local,
+                             ROW_NUMBER() OVER (PARTITION BY school_local ORDER BY monthly_ranking ASC) AS rn
+                           FROM school
+                         )
+                         SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local
+                         FROM RankedSchools
+                         WHERE rn <= 3
+                         ORDER BY monthly_total_time DESC;`;
+
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: '데이터베이스 쿼리 오류' });
+      }
+
+      console.log('전국 대회');
+      console.log(results);
+      return res.json(results); // 월별 총 시간 기준으로 정렬된 지역별 1, 2, 3등 반환
+    });
+  }
+
+  // '랭킹' 대회 처리
+  else if (competition === '랭킹') {
+    const query = `SELECT school_name, total_ranking, monthly_ranking, local_ranking, total_time, monthly_total_time, school_level, school_local
+                   FROM school
+                   ORDER BY total_ranking ASC;`;
+    db.query(query, (err, results) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: '데이터베이스 쿼리 오류' });
+      }
+      console.log('랭킹');
+      console.log(results);
+      return res.json(results); // 총 시간 기준으로 학교 데이터 반환
+    });
+  }
+
+  // 잘못된 파라미터 처리
+  else {
+    return res.status(400).json({ error: 'Invalid competition or missing parameters' });
+  }
+});
+
+app.post('/school-contributions', (req, res) => {
+  const userEmail = req.body.userEmail;
+  console.log('userEmail:', userEmail);
+
+  // 사용자 이메일에 해당하는 school_name과 nickname을 가져오기 위한 쿼리
+  const schoolQuery = `
+    SELECT school_name, nickname FROM users WHERE email = ?
+  `;
+
+  db.query(schoolQuery, [userEmail], (error, schoolResults) => {
+    if (error) {
+      console.error('쿼리 실행 실패:', error);
+      return res.status(500).json({ message: '서버 오류' });
+    }
+
+    if (schoolResults.length === 0) {
+      console.log('사용자를 찾을 수 없음');
+      return res.status(404).json({ message: '사용자를 찾을 수 없습니다.' });
+    }
+
+    const schoolName = schoolResults[0].school_name;
+    const userNickname = schoolResults[0].nickname;
+
+    if (!schoolName) {
+      console.log('현재 속한 학교가 없음');
+      return res.status(404).json({ message: '현재 속한 학교가 없습니다.' });
+    }
+
+    console.log('학교 이름:', schoolName, '사용자 닉네임:', userNickname);
+
+    const schoolStatsQuery = `
+      SELECT total_ranking, total_time FROM school
+      WHERE school_name = ?
+    `;
+
+    const contributionsQuery = `
+      SELECT u.nickname, s.total_time
+      FROM users u
+      JOIN studytimerecords s ON u.user_id = s.user_id
+      WHERE u.school_name = ?
+      ORDER BY s.total_time DESC
+    `;
+
+    db.query(schoolStatsQuery, [schoolName], (statsError, statsResults) => {
+      if (statsError) {
+        console.error('학교 기여도 및 통계 쿼리 실행 실패:', statsError);
+        return res.status(500).json({ message: '서버 오류' });
+      }
+
+      if (statsResults.length === 0) {
+        console.log('학교 기여도 및 통계 정보 없음');
+        return res.status(200).json({
+          message: '학교 기여도 및 순위 정보가 없습니다.',
+        });
+      }
+
+      const ranking = statsResults[0].total_ranking || 0;
+      const total_time = statsResults[0].total_time || 0;
+
+      console.log('학교 순위:', ranking, '총 공부 시간:', total_time);
+
+      db.query(contributionsQuery, [schoolName], (contribError, contribResults) => {
+        if (contribError) {
+          console.error('기여도 쿼리 실행 실패:', contribError);
+          return res.status(500).json({ message: '서버 오류' });
+        }
+
+        if (contribResults.length === 0) {
+          console.log('현재 학교에 속한 사용자가 없음');
+          return res.status(200).json({
+            schoolName: schoolName,
+            ranking: ranking,
+            total_time:total_time,
+            userNickname: userNickname,
+            contributions: [],
+            message: '현재 학교에 속한 사용자가 없습니다.',
+          });
+        }
+
+        console.log('기여도 결과:', contribResults);
+
+        res.status(200).json({
+          schoolName: schoolName,
+          ranking: ranking,
+          total_time: total_time,
+          userNickname: userNickname, // 추가된 사용자 닉네임
+          contributions: contribResults,
+        });
+      });
+    });
+  });
+});
+
+
+app.post('/selected-school-contributions', (req, res) => {
+  const schoolName = req.body.schoolName;
+
+  if (!schoolName) {
+    return res.status(400).json({ error: '학교 이름이 필요합니다.' });
+  }
+
+
+  const query = `
+    SELECT u.nickname, s.total_time
+    FROM users u
+    JOIN studytimerecords s ON u.user_id = s.user_id
+    WHERE u.school_name = ?
+    ORDER BY s.total_time DESC
+  `;
+
+  db.query(query, [schoolName], (err, results) => {
+    if (err) {
+      console.error('쿼리 오류:', err);
+      return res.status(500).json({ error: '데이터를 가져오는 중 오류가 발생했습니다.' });
+    }
+
+    res.json({
+      schoolName: schoolName,
+      contributions: results.map(row => ({
+        nickname: row.nickname,
+        total_time: row.total_time
+      }))
+    });
+  });
+});
+
+app.post('/selected-school-competition', (req, res) => {
+  const schoolName = req.body.schoolName;
+
+  if (!schoolName) {
+    return res.status(400).json({ error: '학교 이름이 필요합니다.' });
+  }
+
+
+  const query = `
+    SELECT u.nickname, s.monthly_time
+    FROM users u
+    JOIN studytimerecords s ON u.user_id = s.user_id
+    WHERE u.school_name = ?
+    ORDER BY s.monthly_time DESC
+  `;
+
+  db.query(query, [schoolName], (err, results) => {
+    if (err) {
+      console.error('쿼리 오류:', err);
+      return res.status(500).json({ error: '데이터를 가져오는 중 오류가 발생했습니다.' });
+    }
+
+    res.json({
+      schoolName: schoolName,
+      contributions: results.map(row => ({
+        nickname: row.nickname,
+        monthly_time: row.monthly_time
+      }))
+    });
+  });
+});
+
+app.post('/get-user-id', async (req, res) => {
+  const { userEmail } = req.body;
+  console.log(`Received request for user email: ${userEmail}`);
+
+  const query = 'SELECT user_id FROM users WHERE email = ?';
+  db.query(query, [userEmail], (err, results) => {
+  if(err) {
+        return res.status(404).json({ message: 'User not fount'});
+        }
+        res.status(200).json({ user_id: results[0].user_id});
+        });
+});
+
+// 타이머 기록을 계산하는 엔드포인트
+app.post('/calculate-time-and-points', (req, res) => {
+    const { input_record_time, user_id } = req.body;
+
+    if (!input_record_time || !user_id) {
+        return res.status(400).json({ message: 'Input record time and user ID are required' });
+    }
+
+    // 1. 사용자가 속한 학교 ID 조회
+    const schoolIdQuery = `
+      SELECT school_id FROM users WHERE user_id = ?
+    `;
+
+    db.query(schoolIdQuery, [user_id], (err, schoolResult) => {
+        if (err) {
+            console.error('Error fetching school_id:', err);
+            return res.status(500).json({ message: '학교 정보를 가져오는 중 오류가 발생했습니다.' });
+        }
+
+        if (schoolResult.length === 0) {
+            return res.status(404).json({ message: '학교 정보를 찾을 수 없습니다.' });
+        }
+
+        const schoolId = schoolResult[0].school_id;
+
+        // 2. 현재 학교의 레벨을 조회
+        const currentLevelQuery = `
+          SELECT school_level FROM school WHERE school_id = ?
+        `;
+
+        db.query(currentLevelQuery, [schoolId], (err, currentLevelResult) => {
+            if (err) {
+                console.error('Error fetching current school level:', err);
+                return res.status(500).json({ message: '학교 레벨 정보를 가져오는 중 오류가 발생했습니다.' });
+            }
+
+            if (currentLevelResult.length === 0) {
+                return res.status(404).json({ message: '학교 레벨 정보를 찾을 수 없습니다.' });
+            }
+
+            const currentSchoolLevel = currentLevelResult[0].school_level;
+
+            // 3. 프로시저 호출
+            const query = `CALL CalculateTimeAndPoints_proc(?, ?)`;
+            db.query(query, [input_record_time, user_id], (err, results) => {
+                if (err) {
+                    return res.status(500).json({ message: 'Error calling stored procedure' });
+                }
+
+                // 4. 프로시저 실행 후 학교 레벨 다시 조회
+                db.query(currentLevelQuery, [schoolId], (err, updatedLevelResult) => {
+                    if (err) {
+                        console.error('Error fetching updated school level:', err);
+                        return res.status(500).json({ message: '업데이트된 학교 레벨 정보를 가져오는 중 오류가 발생했습니다.' });
+                    }
+
+                    const updatedSchoolLevel = updatedLevelResult[0].school_level;
+
+                    // 5. 레벨 변경 여부 확인 후 알림 생성
+                    if (currentSchoolLevel !== updatedSchoolLevel) {
+                        // 6. 해당 학교의 모든 사용자에게 알림 생성
+                        const getUsersQuery = `
+                          SELECT user_id FROM users WHERE school_id = ?
+                        `;
+
+                        db.query(getUsersQuery, [schoolId], (err, userResult) => {
+                            if (err) {
+                                console.error('Error fetching users for notification:', err);
+                                return res.status(500).json({ message: '사용자 정보를 가져오는 중 오류가 발생했습니다.' });
+                            }
+
+                            userResult.forEach(user => {
+                                const userId = user.user_id;
+
+                                // 7. 학교 레벨업 알림 생성
+                                const notificationMessage = `학교가 레벨업했습니다!`;  // 레벨업 메시지
+                                const notificationQuery = `
+                                    CALL CreateNotification(?, '학교 레벨업', ?, 'system')
+                                `;
+                                db.query(notificationQuery, [userId, notificationMessage], (err, notificationResult) => {
+                                    if (err) {
+                                        console.error('Error creating notification:', err);
+                                        return res.status(500).send({ message: '알림 생성 중 오류가 발생했습니다.' });
+                                    }
+                                });
+                            });
+                        });
+                    }
+
+                    res.status(200).json({ message: 'Procedure called successfully', data: results });
+                });
+            });
+        });
+    });
+});
+
+
+// 사용자 ID에 해당하는 메달 목록을 가져오는 API
+app.post('/get-user-medals', (req, res) => {
+  const { userId } = req.body;
+
+  // userId에 해당하는 메달 목록 가져오기
+  const query = 'SELECT medal_id, ranking, battle_inf FROM medal WHERE user_id = ?';
+
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    // 결과 확인을 위한 로그 추가
+        console.log('User ID:', userId);  // 요청한 userId 출력
+        console.log('Fetched Medals:', results);  // 가져온 메달 목록 출력
+
+    // 메달 목록 반환
+    res.json(results);
+  });
+});
+
+// 사용자 ID에 해당하는 메달 목록을 가져오는 API
+app.post('/get-school-medals', (req, res) => {
+  const { schoolId } = req.body;
+
+  // userId에 해당하는 메달 목록 가져오기
+  const query = `
+                WITH RankedMedals AS (
+                         SELECT
+                           school_id,
+                           medal_id,
+                           ranking,
+                           battle_inf,
+                           ROW_NUMBER() OVER (PARTITION BY school_id ORDER BY medal_id) AS row_num  -- school_id별로 순위 부여
+                         FROM medal
+                         WHERE school_id = ?
+                       )
+                       SELECT school_id, medal_id, ranking, battle_inf
+                       FROM RankedMedals
+                       WHERE row_num = 1`;
+
+  db.query(query, [schoolId], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    // 결과 확인을 위한 로그 추가  // 요청한 userId 출력
+        console.log('Fetched Medals:', results);  // 가져온 메달 목록 출력
+
+    // 메달 목록 반환
+    res.json(results);
+  });
+});
+
+app.post('/get-medal-info', (req, res) => {
+  const { userId, medalId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
+  }
+
+  const query = `
+    SELECT *
+        FROM medal m
+        WHERE m.user_id = ? AND m.medal_id = ?
+  `;
+
+  db.query(query, [userId,medalId], (err, results) => {
+    if (err) {
+      console.error('Error retrieving medal info:', err);
+      return res.status(500).json({ message: 'Error retrieving medal information' });
+    }
+
+    if (results.length > 0) {
+      res.status(200).json(results[0]);
+    } else {
+      res.status(404).json({ message: 'Medal information not found for the user' });
+    }
+  });
+});
+
+// 칠판에 학교명 띄우기
+app.post('/get-user-school-name', (req, res) => {
+  const { userId } = req.body;
+  console.log(req.body);
+  console.log('Received userId:', userId);
+
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
+  }
+
+  const query = `
+    SELECT school_name
+    FROM Users
+    WHERE user_id = ?
+  `;
+
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error retrieving school name:', err);
+      return res.status(500).json({ message: 'Error retrieving school name' });
+    }
+
+    console.log('Query results:', results);
+
+    if (results.length > 0) {
+      res.status(200).json({ school_name: results[0].school_name });
+    } else {
+      res.status(404).json({ message: 'School name not found for the user' });
+    }
+  });
+});
+
+// /get-user-nickname 엔드포인트 정의
+app.post('/get-user-nickname', (req, res) => {
+  const { userId } = req.body;  // 요청 본문에서 userId를 가져옴
+
+  // userId로 사용자의 닉네임을 데이터베이스에서 조회
+  const query = 'SELECT nickname FROM users WHERE user_id = ?';  // 사용자 테이블에서 닉네임 조회
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('닉네임 조회 실패:', err);
+      return res.status(500).json({ error: '닉네임 조회 실패' });
+    }
+
+    // 사용자가 존재하면 닉네임 반환
+    if (results.length > 0) {
+      return res.json({ nickname: results[0].nickname });
+    } else {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다' });
+    }
+  });
+});
+
+//fullSchool_screen.dart에 사용할 post문
+app.post('/get-school-info', (req, res) => {
+  const { userId } = req.body;
+  console.log(req.body);
+
+  const query = `
+    SELECT School.school_id, School.school_name, School.school_level, School.total_time
+    FROM Users
+    JOIN School ON Users.school_id = School.school_id
+    WHERE Users.user_id = ?;
+  `;
+
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching school info:', err);
+      return res.status(500).json({ message: 'Error retrieving school info' });
+    }
+
+    if (results.length > 0) {
+      const schoolInfo = results[0];
+      res.status(200).json(schoolInfo);
+    } else {
+      res.status(404).json({ message: 'School info not found' });
+    }
+  });
+});
+
+//user의 point를 가져옴.
+app.post('/getUserPoints', (req, res) => {
+  const userId = req.body.user_id;
+
+  // Ensure user_id is provided
+  if (!userId) {
+    return res.status(400).json({ error: 'User ID is required' });
+  }
+
+  const query = 'SELECT points FROM Users WHERE user_id = ?';
+
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching points:', err);
+      return res.status(500).json({ error: 'Failed to retrieve points' });
+    }
+
+    if (results.length > 0) {
+      res.json({ points: results[0].points });
+    } else {
+      res.json({ points: 0 }); // Default if no points found
+    }
+  });
+});
+
+app.post('/purchaseItem', (req, res) => {
+  const { user_id, item_id, item_price } = req.body;
+
+  // MySQL 프로시저 호출
+  const query = 'CALL purchaseItem(?, ?, ?)';
+  db.query(query, [user_id, item_id, item_price], (err, results) => {
+    if (err) {
+      console.error('Error executing purchaseItem procedure:', err);
+      res.status(500).json({ message: '구매 중 문제가 발생했습니다.' });
+    } else {
+      res.status(200).json({ message: '구매가 완료되었습니다.' });
+    }
+  });
+});
+
+//user의 가방
+app.post('/getUserItems', (req, res) => {
+  const { user_id, category } = req.body; // 카테고리도 함께 받아옴
+
+  if (!user_id) {
+    return res.status(400).json({ error: 'user_id is required' });
+  }
+
+  let query = `
+    SELECT i.inventory_id, s.item_name, i.category, i.acquired_at, i.is_placed
+    FROM inventory i
+    JOIN store s ON i.item_id = s.item_id
+    WHERE i.user_id = ?`;
+
+  // 카테고리가 '전체'가 아닌 경우 필터링 추가
+  if (category && category !== '전체') {
+    query += ` AND i.category = ?`;
+  }
+
+  db.query(query, category && category !== '전체' ? [user_id, category] : [user_id], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to load user items' });
+    }
+
+    const items = results.map(item => ({
+      inventory_id: item.inventory_id,
+      item_name: item.item_name,
+      category: item.category,
+      acquired_at: item.acquired_at,
+      is_placed: item.is_placed
+    }));
+
+    res.json({ items });
+  });
+});
+
+
+//Store테이블 가져오기
+app.post('/getItemsByCategory', (req, res) => {
+  const category = req.body.category;
+  const query = `SELECT item_id, item_name, description, price FROM Store WHERE category = ?`;
+
+  db.query(query, [category], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ items: results });
+  });
+});
+
+// Update is_placed API
+app.post('/updateItemIsPlaced', (req, res) => {
+  const { user_id, inventory_id, x, y } = req.body; // inventory_id 받아오기
+
+  console.log('Received request:', { user_id, inventory_id, x, y });
+
+  // SQL 쿼리 작성 (inventory_id 사용)
+  const query = `
+    UPDATE inventory
+    SET is_placed = 1, x = ?, y = ?
+    WHERE inventory_id = ? AND user_id = ?;
+  `;
+
+  // 쿼리 실행
+  db.query(query, [x, y, inventory_id, user_id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Database error' });
+    }
+    if (result.affectedRows > 0) {
+      return res.status(200).json({ message: 'Item updated successfully' });
+    } else {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+  });
+});
+
+// 배치된 아이템 가져오기 API
+app.post('/get-placed-items', (req, res) => {
+  const { userId } = req.body;
+
+  const query = `
+    SELECT i.inventory_id, s.item_name, i.x, i.y, i.priority
+    FROM inventory AS i
+    INNER JOIN store AS s ON i.item_id = s.item_id
+    WHERE i.user_id = ? AND i.is_placed = 1
+  `;
+
+  db.query(query, [userId], (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Database error' });
+    }
+    res.status(200).json(results);
+  });
+});
+
+// 배치된 아이템 삭제 API
+app.post('/remove-item', (req, res) => {
+  const { user_id, inventory_id } = req.body;
+
+  const query = `
+    UPDATE inventory
+    SET is_placed = 0, priority = 0
+    WHERE user_id = ? AND inventory_id = ?
+  `;
+
+  db.query(query, [user_id, inventory_id], (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Database error' });
+    }
+
+    if (result.affectedRows > 0) {
+      res.status(200).json({ message: 'Item removed successfully' });
+    } else {
+      res.status(404).json({ message: 'Item not found or not placed' });
+    }
+  });
+});
+
+// 아이템 위치 업데이트 API
+app.post('/update-item-position', async (req, res) => {
+  const { user_id, inventory_id, x, y, priority } = req.body;
+
+  try {
+    await db.query(
+      `UPDATE inventory SET priority = priority + 1 WHERE user_id = ? AND inventory_id != ? AND is_placed = 1`,
+      [user_id, inventory_id]
+    );
+
+    await db.query(
+      `UPDATE inventory SET x = ?, y = ?, priority = ? WHERE user_id = ? AND inventory_id = ? AND is_placed = 1`,
+      [x, y, priority, user_id, inventory_id]
+    );
+
+    res.json({ message: 'Item updated successfully' }); // 최종 응답
+  } catch (err) {
+    console.error('Error updating item:', err);
+    res.status(500).json({ error: 'Failed to update item' }); // 오류 응답
+  }
+});
+
+app.get('/search-user', (req, res) => {
+  const { nickname } = req.query;
+  const userId = req.userId;  // 요청 보낸 사용자의 userId (예: 토큰에서 추출)
+
+  const query = 'SELECT user_id, nickname FROM users WHERE nickname = ?';
+
+  db.query(query, [nickname], (err, rows) => {
+    if (err) {
+      console.error('Error searching user by nickname:', err);
+      return res.status(500).send({ message: '사용자를 검색하는 중 오류가 발생했습니다.' });
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).send({ message: '사용자를 찾을 수 없습니다.' });
+    }
+
+    // 자기 자신의 닉네임을 검색한 경우 거부
+    if (rows[0].user_id === userId) {
+      return res.status(400).send({ message: '자기 자신을 검색할 수 없습니다.' });
+    }
+
+    res.status(200).send(rows[0]); // 유저 정보 반환
+  });
+});
+
+
+app.post('/send-friend-request', (req, res) => {
+  const { userId, friendNickname } = req.body;
+
+  const query = 'SELECT user_id FROM users WHERE nickname = ?';
+
+  db.query(query, [friendNickname], (err, rows) => {
+    if (err) {
+      console.error('Error searching user by nickname:', err);
+      return res.status(500).send({ message: '친구 요청 대상 사용자를 찾을 수 없습니다.' });
+    }
+
+    if (rows.length === 0) {
+      return res.status(404).send({ message: '친구 요청 대상 사용자를 찾을 수 없습니다.' });
+    }
+
+    const friendId = rows[0].user_id;
+
+    if (userId === friendId) {
+      return res.status(400).send({ message: '자기 자신에게 친구 요청을 보낼 수 없습니다.' });
+    }
+
+    const checkRequestQuery = `
+      SELECT * FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
+    `;
+
+    db.query(checkRequestQuery, [userId, friendId, friendId, userId], (err, existingRequest) => {
+      if (err) {
+        console.error('Error checking existing friend request:', err);
+        return res.status(500).send({ message: '친구 요청을 확인하는 중 오류가 발생했습니다.' });
+      }
+
+      if (existingRequest.length > 0) {
+        return res.status(400).send({ message: '이미 친구 요청이 존재합니다.' });
+      }
+
+      const insertQuery = `
+        INSERT INTO friends (user_id, friend_id, status, created_at, updated_at)
+        VALUES (?, ?, 'requested', NOW(), NOW())
+      `;
+
+      db.query(insertQuery, [userId, friendId], (err, result) => {
+        if (err) {
+          console.error('Error sending friend request:', err);
+          return res.status(500).send({ message: '친구 요청을 보내는 중 오류가 발생했습니다.' });
+        }
+
+        // 친구 요청 성공 시 알림 생성
+        const notificationQuery = `
+          CALL CreateNotification(?, '새로운 친구 요청', '새로운 친구 요청이 있습니다.', 'friend_request')
+        `;
+        db.query(notificationQuery, [friendId], (err, notificationResult) => {
+          if (err) {
+            console.error('Error creating notification:', err);
+            return res.status(500).send({ message: '알림 생성 중 오류가 발생했습니다.' });
+          }
+
+          res.status(200).send({ message: '친구 요청이 성공적으로 전송되었습니다.' });
+        });
+      });
+    });
+  });
+});
+
+
+// 친구 요청 목록 가져오기
+app.get('/friend-requests/:userId', (req, res) => {
+  const userId = req.params.userId;
+
+  const query = `
+      SELECT f.friendship_id, f.user_id, f.friend_id, u.nickname
+      FROM friends f
+      JOIN users u ON f.user_id = u.user_id
+      WHERE f.friend_id = ? AND f.status = 'requested'
+    `;
+
+  db.query(query, [userId], (err, rows) => {
+    if (err) {
+      console.error('Error fetching friend requests:', err);
+      return res.status(500).json({ message: '친구 요청을 가져오는 중 오류가 발생했습니다.' });
+    }
+
+    if (rows.length === 0) {
+      return res.status(200).json([]);  // 요청 목록이 없으면 빈 배열 반환
+    }
+
+    res.status(200).json(rows);  // 친구 요청 목록 반환
+  });
+});
+
+
+// 친구 요청 수락
+app.post('/accept-friend-request', (req, res) => {
+  const { friendshipId } = req.body;
+
+  // 1. 친구 요청 수락 상태로 업데이트
+  const query = `
+    UPDATE friends
+    SET status = 'accepted'
+    WHERE friendship_id = ? AND status = 'requested'
+  `;
+
+  db.query(query, [friendshipId], (err, result) => {
+    if (err) {
+      console.error('Error accepting friend request:', err);
+      return res.status(500).json({ message: '친구 요청 수락 중 오류가 발생했습니다.' });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: '해당 친구 요청을 찾을 수 없습니다.' });
+    }
+
+    // 2. friendship_id를 통해 상대방 user_id 가져오기
+    const getUserIdQuery = `
+      SELECT user_id FROM friends
+      WHERE friendship_id = ?
+    `;
+
+    db.query(getUserIdQuery, [friendshipId], (err, userResult) => {
+      if (err) {
+        console.error('Error fetching user_id:', err);
+        return res.status(500).json({ message: '사용자 정보를 가져오는 중 오류가 발생했습니다.' });
+      }
+
+      if (userResult.length === 0) {
+        return res.status(404).json({ message: '사용자를 찾을 수 없습니다.' });
+      }
+
+      const userId = userResult[0].user_id;
+
+      // 3. 친구 수락 알림 생성 (user_id 포함)
+      const notificationMessage = `user${userId} 님이 친구 요청을 수락했습니다!`;  // 메시지에 user_id 포함
+      const notificationQuery = `
+        CALL CreateNotification(?, '새로운 친구 요청', ?, 'friend_request')
+      `;
+
+      db.query(notificationQuery, [userId, notificationMessage], (err, notificationResult) => {
+        if (err) {
+          console.error('Error creating notification:', err);
+          return res.status(500).send({ message: '알림 생성 중 오류가 발생했습니다.' });
+        }
+
+        // 4. 응답 전송
+        res.status(200).send({ message: '친구 요청이 성공적으로 수락되었습니다.' });
+      });
+    });
+  });
+});
+
+
+// 친구 요청 거절
+app.post('/reject-friend-request', (req, res) => {
+  const { friendshipId } = req.body;
+
+  const query = `
+    DELETE FROM friends
+    WHERE friendship_id = ? AND status = 'requested'
+  `;
+
+  db.query(query, [friendshipId], (err, result) => {
+    if (err) {
+      console.error('Error rejecting friend request:', err);
+      return res.status(500).json({ message: '친구 요청 거절 중 오류가 발생했습니다.' });
+    }
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: '해당 친구 요청을 찾을 수 없습니다.' });
+    }
+
+    res.status(200).json({ message: '친구 요청이 거절되었습니다.' });
+  });
+});
+
+// 알림 데이터 가져오기
+app.post('/get-notifications', (req, res) => {
+    const { userId } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const query = `
+        SELECT notification_id, title, message, type, is_read, created_at
+        FROM Notifications
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+    `;
+
+    db.query(query, [userId], (error, results) => {
+        if (error) {
+            console.error('Error fetching notifications:', error);
+            return res.status(500).json({ error: 'Database query error' });
+        }
+        res.status(200).json(results);
+    });
+});
+
+// POST /get-notifications
+app.post('/get-notifications', async (req, res) => {
+    const { userId, includeRead } = req.body;
+
+    if (!userId) {
+        return res.status(400).json({ error: "Missing userId in request body" });
+    }
+
+    try {
+        const connection = await mysql.createConnection(dbConfig);
+        const query = includeRead
+            ? 'SELECT * FROM Notifications WHERE user_id = ? ORDER BY created_at DESC'
+            : 'SELECT * FROM Notifications WHERE user_id = ? AND is_read = FALSE ORDER BY created_at DESC';
+
+        const [rows] = await connection.execute(query, [userId]);
+        await connection.end();
+
+        return res.status(200).json(rows);
+    } catch (err) {
+        console.error("Error fetching notifications:", err);
+        return res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+});
+
+// 예제: db를 사용해 쿼리 실행
+app.post('/mark-notification-read', (req, res) => {
+    const { notificationId } = req.body;
+
+    if (!notificationId) {
+        return res.status(400).json({ error: "Missing notificationId in request body" });
+    }
+
+    db.query(
+        'UPDATE Notifications SET is_read = TRUE WHERE notification_id = ?',
+        [notificationId],
+        (err, result) => {
+            if (err) {
+                console.error("Error marking notification as read:", err);
+                return res.status(500).json({ error: "Failed to mark notification as read" });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ error: "Notification not found" });
+            }
+
+            return res.status(200).json({ success: true });
+        }
+    );
+});
+
+
+
+
+// 서버 시작
+app.listen(port, () => {
+    console.log(`Server running at http://116.124.191.174:${port}`);
+});
+app.get('/friends/:userId', (req, res) => {
+  const { userId } = req.params;
+
+  const query = `
+    SELECT
+      CASE
+        WHEN f.user_id = ? THEN f.friend_id
+        ELSE f.user_id
+      END AS friend_id,
+      u.nickname
+    FROM friends f
+    JOIN users u ON u.user_id = (
+      CASE
+        WHEN f.user_id = ? THEN f.friend_id
+        ELSE f.user_id
+      END
+    )
+    WHERE (f.user_id = ? OR f.friend_id = ?) AND f.status = 'accepted'
+  `;
+
+  db.query(query, [userId, userId, userId, userId], (err, results) => {
+    if (err) {
+      console.error('Error fetching friends:', err);
+      return res.status(500).json({ message: '친구 목록을 가져오는 중 오류가 발생했습니다.' });
+    }
+
+    // 결과가 비어 있을 경우 처리
+    if (!results || results.length === 0) {
+      return res.status(404).json({ message: '친구 목록이 비어 있습니다.' });
+    }
+
+    // 정상적인 결과 반환
+    res.status(200).json(results);
+  });
+});
