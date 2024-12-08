@@ -1,11 +1,15 @@
 //npm install node-cron
+//npm install brcypt
+
 const express = require('express');
 const mysql = require('mysql');
 const bodyParser = require('body-parser');
 const cron = require('node-cron');
+const bcrypt = require('bcrypt');
+const saltRounds = 10; // Salt rounds 값은 보안성에 영향을 미칩니다.
 
 const app = express();
-const port = 15023;
+    const port = 15023;
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
@@ -25,32 +29,6 @@ db.connect((err) => {
 // 미들웨어 설정
 app.use(bodyParser.json());
 app.use(express.json());
-
-// 서버 동시 접속 방지
-const redis = require('redis');
-
-let redisClient;
-
-function initializeRedis() {
-  if (!redisClient) {
-    redisClient = redis.createClient();
-
-    redisClient.on('error', (err) => {
-      console.error('Redis Error:', err);
-    });
-
-    redisClient.on('connect', () => {
-      console.log('Connected to Redis');
-    });
-
-    redisClient.connect().catch((err) => {
-      console.error('Redis Connection Error:', err);
-    });
-  }
-  return redisClient;
-}
-
-module.exports = initializeRedis;
 
 // 월간 초기화 및 메달 수여 작업 (매월 1일 0시 실행)
 cron.schedule('0 0 1 * *', async () => {
@@ -82,7 +60,7 @@ cron.schedule('0 0 1 * *', async () => {
 
         // 지난달 메달 수여: 순위에 따라 메달 부여
         for (const school of topSchoolsLastMonth) {
-            const ranking = school.monthly_ranking; // RANK()로 계산된 순위 사용
+            const ranking = School.monthly_ranking; // RANK()로 계산된 순위 사용
             if (ranking > 3) break; // 4등 이상은 메달 수여 제외
 
             // 해당 학교 소속 사용자 가져오기
@@ -90,7 +68,7 @@ cron.schedule('0 0 1 * *', async () => {
                 SELECT user_id
                 FROM Users
                 WHERE school_id = ?
-            `, [school.school_id]);
+            `, [School.school_id]);
 
             // 사용자에게 메달 부여
             if (users.length > 0) {
@@ -101,13 +79,13 @@ cron.schedule('0 0 1 * *', async () => {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         user.user_id,                // 사용자 ID
-                        school.school_id,            // 학교 ID
-                        school.school_name,          // 학교 이름
+                        School.school_id,            // 학교 ID
+                        School.school_name,          // 학교 이름
                         ranking,                     // 순위
-                        school.monthly_total_time,   // 월간 총 시간
+                        School.monthly_total_time,   // 월간 총 시간
                         lastMonthDateString,         // 메달 수여 날짜 (ex. "2024년 1월")
                         battleInf,                   // "월 전국대회 메달" 형식의 정보
-                        school.school_local
+                        School.school_local
                     ])
                 ));
 
@@ -134,7 +112,7 @@ cron.schedule('0 0 1 * *', async () => {
 
         // 메달 수여: 순위에 따라 메달 부여
         for (const school of topSchools) {
-            const ranking = school.monthly_ranking; // RANK()로 계산된 순위 사용
+            const ranking = School.monthly_ranking; // RANK()로 계산된 순위 사용
             if (ranking > 3) break; // 4등 이상은 메달 수여 제외
 
             // 해당 학교 소속 사용자 가져오기
@@ -142,10 +120,10 @@ cron.schedule('0 0 1 * *', async () => {
                 SELECT user_id
                 FROM Users
                 WHERE school_id = ?
-            `, [school.school_id]);
+            `, [School.school_id]);
 
             // 사용자에게 메달 부여
-            if (users.length > 0) {
+            if (Users.length > 0) {
                 const battleInf = `${getDateString} 전국대회 메달`; // 지역 포함 메달 정보
                 await Promise.all(users.map(user =>
                     queryAsync(`
@@ -153,13 +131,13 @@ cron.schedule('0 0 1 * *', async () => {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     `, [
                         user.user_id,                // 사용자 ID
-                        school.school_id,            // 학교 ID
-                        school.school_name,          // 학교 이름
+                        School.school_id,            // 학교 ID
+                        School.school_name,          // 학교 이름
                         ranking,                     // 순위
-                        school.monthly_total_time,   // 월간 총 시간
+                        School.monthly_total_time,   // 월간 총 시간
                         getDateString,               // 메달 수여 날짜 (ex. "2024년 1월")
                         battleInf,                   // "월 전국대회 메달" 형식의 정보
-                        school.school_local
+                        School.school_local
                     ])
                 ));
 
@@ -296,136 +274,135 @@ app.get('/search-schools', (req, res) => {
 });
 
 app.post('/signup', (req, res) => {
-    const { email, password, nickname, school_name } = req.body;
+  const { email, password, nickname, school_name } = req.body;
 
-    // 필수 항목 체크
-    if (!email || !password || !nickname || !school_name) {
-        return res.status(400).json({ message: 'Email, password, nickname, and school_name are required' });
+  if (!email || !password || !nickname || !school_name) {
+    return res.status(400).json({ message: 'Email, password, nickname, and school_name are required' });
+  }
+
+  bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error hashing password' });
     }
 
     // 트랜잭션 시작
     db.beginTransaction((err) => {
-        if (err) return res.status(500).json({ message: 'Transaction start error' });
+      if (err) return res.status(500).json({ message: 'Transaction start error' });
 
-        // 이메일, 닉네임 중복 확인
-        db.query('SELECT email FROM Users WHERE email = ?', [email], (err, result) => {
+      db.query('SELECT email FROM Users WHERE email = ?', [email], (err, result) => {
+        if (err) {
+          db.rollback();
+          return res.status(500).json({ message: 'Error checking email' });
+        }
+        if (result.length > 0) {
+          db.rollback();
+          return res.status(400).json({ message: 'Email is already taken' });
+        }
+
+        db.query('SELECT nickname FROM Users WHERE nickname = ?', [nickname], (err, result) => {
+          if (err) {
+            db.rollback();
+            return res.status(500).json({ message: 'Error checking nickname' });
+          }
+          if (result.length > 0) {
+            db.rollback();
+            return res.status(400).json({ message: 'Nickname is already taken' });
+          }
+
+          db.query('SELECT school_id FROM School WHERE school_name = ?', [school_name], (err, result) => {
             if (err) {
-                db.rollback();
-                return res.status(500).json({ message: 'Error checking email' });
-            }
-            if (result.length > 0) {
-                db.rollback();
-                return res.status(400).json({ message: 'Email is already taken' });
+              db.rollback();
+              return res.status(500).json({ message: 'Error checking existing school' });
             }
 
-            // 닉네임 중복 확인
-            db.query('SELECT nickname FROM Users WHERE nickname = ?', [nickname], (err, result) => {
+            if (result.length === 0) {
+              db.rollback();
+              return res.status(404).json({ message: 'School does not exist' });
+            }
+
+            const school_id = result[0].school_id;
+
+            // Users 테이블에 데이터 삽입 (해시된 비밀번호 사용)
+            const query = `INSERT INTO Users (email, password, nickname, school_name, account_status, school_id) VALUES (?, ?, ?, ?, 'active', ?)`;
+            db.query(query, [email, hashedPassword, nickname, school_name, school_id], (err, result) => {
+              if (err) {
+                db.rollback();
+                return res.status(500).json({ message: 'Error creating user' });
+              }
+
+              const userId = result.insertId;
+
+              // StudyTimeRecords 테이블 초기화
+              db.query(`INSERT INTO StudyTimeRecords (user_id) VALUES (?)`, [userId], (err) => {
                 if (err) {
-                    db.rollback();
-                    return res.status(500).json({ message: 'Error checking nickname' });
-                }
-                if (result.length > 0) {
-                    db.rollback();
-                    return res.status(400).json({ message: 'Nickname is already taken' });
+                  db.rollback();
+                  return res.status(500).json({ message: 'Error initializing StudyTimeRecords' });
                 }
 
-                // 기존에 school_name이 있는지 확인
-                db.query('SELECT school_id FROM School WHERE school_name = ?', [school_name], (err, result) => {
-                    if (err) {
-                        db.rollback();
-                        return res.status(500).json({ message: 'Error checking existing school' });
-                    }
-
-                    if (result.length === 0) {
-                        db.rollback();
-                        return res.status(404).json({ message: 'School does not exist' });
-                    }
-
-                    const school_id = result[0].school_id;
-
-                    // Users 테이블에 데이터 삽입
-                    const query = `INSERT INTO Users (email, password, nickname, school_name, account_status, school_id) VALUES (?, ?, ?, ?, 'active', ?)`;
-                    db.query(query, [email, password, nickname, school_name, school_id], (err, result) => {
-                        if (err) {
-                            db.rollback();
-                            return res.status(500).json({ message: 'Error creating user' });
-                        }
-
-                        const userId = result.insertId;
-
-                        // StudyTimeRecords 테이블 초기화
-                        db.query(`INSERT INTO StudyTimeRecords (user_id) VALUES (?)`, [userId], (err) => {
-                            if (err) {
-                                db.rollback();
-                                return res.status(500).json({ message: 'Error initializing StudyTimeRecords' });
-                            }
-
-                            // 트랜잭션 커밋
-                            db.commit((err) => {
-                                if (err) {
-                                    db.rollback();
-                                    return res.status(500).json({ message: 'Transaction commit error' });
-                                }
-                                res.status(201).json({ message: 'User registered successfully' });
-                            });
-                        });
-                    });
+                db.commit((err) => {
+                  if (err) {
+                    db.rollback();
+                    return res.status(500).json({ message: 'Transaction commit error' });
+                  }
+                  res.status(201).json({ message: 'User registered successfully' });
                 });
+              });
             });
+          });
         });
+      });
     });
+  });
 });
-
-
-// 로그인 엔드포인트
-const initializeRedis = require('./redisClient');
 
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
 
-  try {
-    const redisClient = initializeRedis();
+  const query = 'SELECT * FROM Users WHERE email = ?';
+  db.query(query, [email], (error, results) => {
+    if (error) {
+      console.error('쿼리 실행 실패:', error);
+      return res.status(500).json({ message: '서버 오류' });
+    }
 
-    // 로그인 처리
-    const query = 'SELECT user_id FROM Users WHERE email = ? AND password = ?';
-    db.query(query, [email, password], async (err, results) => {
-      if (err) {
-        console.error('쿼리 실행 실패:', err);
-        return res.status(500).json({ message: '서버 오류' });
-      }
+    if (results.length > 0) {
+      const user = results[0];
 
-      if (results.length > 0) {
-        const user = results[0];
-        const userId = results[0].user_id;
-
-        // Redis 세션 확인
-        const sessionExists = await redisClient.get(`session:${userId}`);
-        if (sessionExists) {
-          return res.status(400).json({ error: '로그인 중인 아이디로 시도하였습니다.' });
+      // bcrypt.compare로 해시된 비밀번호와 입력된 비밀번호 비교
+      bcrypt.compare(password, user.password, (err, isMatch) => {
+        if (err) {
+          console.error('비밀번호 비교 실패:', err);
+          return res.status(500).json({ message: '서버 오류' });
         }
 
-        // 새로운 세션 생성
-        await redisClient.setEx(`session:${userId}`, 3600, 'active');
+        if (isMatch) {
+          console.log(`로그인 성공: ${email}`);
 
-        return res.status(200).json({ message: '로그인 성공', userId });
-      } else {
-        return res.status(401).json({ message: 'Invalid email or password' });
-      }
-      console.log(`로그인 성공: ${email}`);
-    });
-  } catch (err) {
-    console.error('Error in /login:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+          // 마지막 로그인 시간 업데이트
+          const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
+          db.query(updateQuery, [email], (updateError) => {
+            if (updateError) {
+              console.error('마지막 로그인 시간 업데이트 실패:', updateError);
+              return res.status(500).json({ message: '서버 오류' });
+            }
+          });
 
-// 로그아웃
-app.post('/logout', (req, res) => {
-  const { userId } = req.body;
-
-  client.del(`session:${userId}`, (err) => {
-      if (err) return res.status(500).json({ error: 'Redis 오류' });
-      res.status(200).json({ message: 'Logout successful' });
+          // 로그인 성공, 사용자 ID와 닉네임 반환
+          return res.status(200).json({
+            user_id: user.user_id,
+            nickname: user.nickname,
+            message: '로그인 성공',
+            userId: user.email
+          });
+        } else {
+          console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
+          return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
+        }
+      });
+    } else {
+      console.log(`로그인 실패: 존재하지 않는 이메일 ${email}`);
+      return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
+    }
   });
 });
 
@@ -540,7 +517,8 @@ app.get('/school-rankings', (req, res) => {
 
 app.post('/school-contributions', (req, res) => {
   const userEmail = req.body.userEmail;
-  console.log('userEmail:', userEmail);
+  const isTotalTime = req.body.isTotalTime;  // total_time 또는 monthly_total_time을 구분하는 flag
+  console.log('userEmail:', userEmail, 'isTotalTime:', isTotalTime);
 
   // 사용자 이메일에 해당하는 school_name과 nickname을 가져오기 위한 쿼리
   const schoolQuery = `
@@ -568,17 +546,26 @@ app.post('/school-contributions', (req, res) => {
 
     console.log('학교 이름:', schoolName, '사용자 닉네임:', userNickname);
 
-    const schoolStatsQuery = `
-      SELECT total_ranking, total_time FROM School
-      WHERE school_name = ?
+    // 학교의 total_time 또는 monthly_total_time에 따른 쿼리
+    const schoolStatsQuery = isTotalTime ? `
+      SELECT total_ranking, total_time FROM School WHERE school_name = ?
+    ` : `
+      SELECT monthly_ranking, monthly_total_time FROM School WHERE school_name = ?
     `;
 
-    const contributionsQuery = `
+    // 기여도 데이터도 total_time 또는 monthly_total_time에 따라 구분
+    const contributionsQuery = isTotalTime ? `
       SELECT u.nickname, s.total_time
       FROM Users u
-      JOIN StudyTimeRecords s ON u.user_id = s.user_id
+      JOIN Studytimerecords s ON u.user_id = s.user_id
       WHERE u.school_name = ?
       ORDER BY s.total_time DESC
+    ` : `
+      SELECT u.nickname, s.monthly_time AS total_time
+      FROM Users u
+      JOIN Studytimerecords s ON u.user_id = s.user_id
+      WHERE u.school_name = ?
+      ORDER BY s.monthly_time DESC
     `;
 
     db.query(schoolStatsQuery, [schoolName], (statsError, statsResults) => {
@@ -594,8 +581,8 @@ app.post('/school-contributions', (req, res) => {
         });
       }
 
-      const ranking = statsResults[0].total_ranking || 0;
-      const total_time = statsResults[0].total_time || 0;
+      const ranking = isTotalTime ? statsResults[0].total_ranking || 0 : statsResults[0].monthly_ranking || 0;
+      const total_time = isTotalTime ? statsResults[0].total_time || 0 : statsResults[0].monthly_total_time || 0;
 
       console.log('학교 순위:', ranking, '총 공부 시간:', total_time);
 
@@ -610,7 +597,7 @@ app.post('/school-contributions', (req, res) => {
           return res.status(200).json({
             schoolName: schoolName,
             ranking: ranking,
-            total_time:total_time,
+            total_time: total_time,
             userNickname: userNickname,
             contributions: [],
             message: '현재 학교에 속한 사용자가 없습니다.',
@@ -632,6 +619,7 @@ app.post('/school-contributions', (req, res) => {
 });
 
 
+
 app.post('/selected-school-contributions', (req, res) => {
   const schoolName = req.body.schoolName;
 
@@ -643,7 +631,7 @@ app.post('/selected-school-contributions', (req, res) => {
   const query = `
     SELECT u.nickname, s.total_time
     FROM Users u
-    JOIN StudyTimeRecords s ON u.user_id = s.user_id
+    JOIN Studytimerecords s ON u.user_id = s.user_id
     WHERE u.school_name = ?
     ORDER BY s.total_time DESC
   `;
@@ -675,7 +663,7 @@ app.post('/selected-school-competition', (req, res) => {
   const query = `
     SELECT u.nickname, s.monthly_time
     FROM Users u
-    JOIN StudyTimeRecords s ON u.user_id = s.user_id
+    JOIN Studytimerecords s ON u.user_id = s.user_id
     WHERE u.school_name = ?
     ORDER BY s.monthly_time DESC
   `;
@@ -811,7 +799,7 @@ app.post('/get-user-medals', (req, res) => {
   const { userId } = req.body;
 
   // userId에 해당하는 메달 목록 가져오기
-  const query = 'SELECT medal_id, ranking, battle_inf FROM Medal WHERE user_id = ?';
+  const query = 'SELECT medal_id, ranking, battle_inf FROM Medal WHERE user_id = ? ORDER BY medal_id ASC';
 
   db.query(query, [userId], (err, results) => {
     if (err) {
@@ -832,19 +820,17 @@ app.post('/get-school-medals', (req, res) => {
 
   // userId에 해당하는 메달 목록 가져오기
   const query = `
-                WITH RankedMedals AS (
-                         SELECT
-                           school_id,
-                           medal_id,
-                           ranking,
-                           battle_inf,
-                           ROW_NUMBER() OVER (PARTITION BY school_id ORDER BY medal_id) AS row_num  -- school_id별로 순위 부여
-                         FROM Medal
-                         WHERE school_id = ?
-                       )
-                       SELECT school_id, medal_id, ranking, battle_inf
-                       FROM RankedMedals
-                       WHERE row_num = 1`;
+                SELECT
+                    school_id,
+                    MIN(medal_id) AS medal_id,  -- 각 get_date별로 가장 작은 medal_id를 가져옵니다.
+                    MIN(ranking) AS ranking,  -- 첫 번째 값을 가져옵니다. (기본적으로 MIN을 사용)
+                    MIN(battle_inf) AS battle_inf,  -- 첫 번째 값을 가져옵니다.
+                    get_date
+                FROM Medal
+                WHERE school_id = ?
+                GROUP BY school_id, get_date
+                ORDER BY medal_id ASC
+                `;
 
   db.query(query, [schoolId], (err, results) => {
     if (err) {
@@ -859,18 +845,43 @@ app.post('/get-school-medals', (req, res) => {
 });
 
 app.post('/get-medal-info', (req, res) => {
-  const { userId, medalId } = req.body;
-  if (!userId) {
-    return res.status(400).json({ message: 'User ID is required' });
+  const { queryType, userId, schoolId, medalId } = req.body;
+
+  // Validate input
+  if (!queryType || !medalId) {
+    return res.status(400).json({ message: 'queryType and medalId are required' });
   }
 
-  const query = `
-    SELECT *
-        FROM Medal m
-        WHERE m.user_id = ? AND m.medal_id = ?
-  `;
+  let query = '';
+  let params = [];
 
-  db.query(query, [userId,medalId], (err, results) => {
+  // Determine query type and construct appropriate query
+  if (queryType === 'user') {
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required for queryType "user"' });
+    }
+    query = `
+      SELECT *
+      FROM Medal m
+      WHERE m.user_id = ? AND m.medal_id = ?
+    `;
+    params = [userId, medalId];
+  } else if (queryType === 'school') {
+    if (!schoolId) {
+      return res.status(400).json({ message: 'schoolId is required for queryType "school"' });
+    }
+    query = `
+      SELECT *
+      FROM Medal m
+      WHERE m.school_id = ? AND m.medal_id = ?
+    `;
+    params = [schoolId, medalId];
+  } else {
+    return res.status(400).json({ message: 'Invalid queryType. Must be "user" or "school"' });
+  }
+
+  // Execute query
+  db.query(query, params, (err, results) => {
     if (err) {
       console.error('Error retrieving medal info:', err);
       return res.status(500).json({ message: 'Error retrieving medal information' });
@@ -879,7 +890,7 @@ app.post('/get-medal-info', (req, res) => {
     if (results.length > 0) {
       res.status(200).json(results[0]);
     } else {
-      res.status(404).json({ message: 'Medal information not found for the user' });
+      res.status(404).json({ message: 'Medal information not found' });
     }
   });
 });
@@ -1340,6 +1351,7 @@ app.post('/accept-friend-request', (req, res) => {
     });
   });
 });
+
 
 
 // 친구 요청 거절
