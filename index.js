@@ -1,5 +1,6 @@
 //npm install node-cron
 //npm install brcypt
+//npm install connect-redis redis express-session
 
 const express = require('express');
 const mysql = require('mysql');
@@ -25,6 +26,25 @@ db.connect((err) => {
     if (err) throw err;
     console.log('Connected to MySQL database');
 });
+
+// 로그인 세션
+const session = require('express-session');
+
+// express-session 설정
+app.use(
+  session({
+    secret: 'your-secret-key', // 환경 변수로 관리 추천
+    resave: false, // 세션 데이터가 변경되지 않으면 저장하지 않음
+    saveUninitialized: false, // 초기화되지 않은 세션 저장하지 않음
+    cookie: {
+      secure: false, // HTTPS 환경에서는 true
+      httpOnly: true, // 클라이언트에서 JavaScript로 쿠키 접근 금지
+    },
+  })
+);
+
+console.log('MemoryStore 기반 세션 관리가 설정되었습니다.');
+
 
 // 미들웨어 설정
 app.use(bodyParser.json());
@@ -355,6 +375,7 @@ app.post('/signup', (req, res) => {
   });
 });
 
+// 로그인 API
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
 
@@ -368,9 +389,13 @@ app.post('/login', (req, res) => {
     if (results.length > 0) {
       const user = results[0];
 
-      // 해시된 비밀번호인지 평문 비밀번호인지 체크하는 로직
+      // 이미 로그인된 사용자인지 확인
+      if (req.session.loggedInUserId === user.user_id) {
+        return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
+      }
+
+      // 해시된 비밀번호 확인
       if (user.password.startsWith('$2b$')) {
-        // 비밀번호가 bcrypt로 해시된 경우
         bcrypt.compare(password, user.password, (err, isMatch) => {
           if (err) {
             console.error('비밀번호 비교 실패:', err);
@@ -379,6 +404,10 @@ app.post('/login', (req, res) => {
 
           if (isMatch) {
             console.log(`로그인 성공: ${email}`);
+
+            // 세션 초기화
+            req.session.loggedInUserId = user.user_id;
+            req.session.nickname = user.nickname;
 
             // 마지막 로그인 시간 업데이트
             const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
@@ -389,12 +418,10 @@ app.post('/login', (req, res) => {
               }
             });
 
-            // 로그인 성공, 사용자 ID와 닉네임 반환
             return res.status(200).json({
               user_id: user.user_id,
               nickname: user.nickname,
-              message: '로그인 성공',
-              userId: user.email
+              message: '로그인 성공'
             });
           } else {
             console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
@@ -402,9 +429,18 @@ app.post('/login', (req, res) => {
           }
         });
       } else {
-        // 평문 비밀번호인 경우 (단순 비교)
+        // 평문 비밀번호 처리 (추후 제거 추천)
         if (password === user.password) {
+          // 이미 로그인된 사용자인지 확인
+          if (req.session.loggedInUserId === user.user_id) {
+            return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
+          }
+
           console.log(`로그인 성공: ${email}`);
+
+          // 세션 초기화
+          req.session.loggedInUserId = user.user_id;
+          req.session.nickname = user.nickname;
 
           // 마지막 로그인 시간 업데이트
           const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
@@ -415,12 +451,10 @@ app.post('/login', (req, res) => {
             }
           });
 
-          // 로그인 성공, 사용자 ID와 닉네임 반환
           return res.status(200).json({
             user_id: user.user_id,
             nickname: user.nickname,
-            message: '로그인 성공',
-            userId: user.email
+            message: '로그인 성공'
           });
         } else {
           console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
@@ -431,6 +465,18 @@ app.post('/login', (req, res) => {
       console.log(`로그인 실패: 존재하지 않는 이메일 ${email}`);
       return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
     }
+  });
+});
+
+// 로그아웃 API
+app.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('세션 삭제 실패:', err);
+      return res.status(500).json({ message: '로그아웃 실패' });
+    }
+
+    res.status(200).json({ message: '로그아웃 성공' });
   });
 });
 
@@ -1480,12 +1526,6 @@ app.post('/mark-notification-read', (req, res) => {
 });
 
 
-
-
-// 서버 시작
-app.listen(port, () => {
-    console.log(`Server running at http://116.124.191.174:${port}`);
-});
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
 
@@ -1520,4 +1560,9 @@ app.get('/friends/:userId', (req, res) => {
     // 정상적인 결과 반환
     res.status(200).json(results);
   });
+});
+
+// 서버 시작
+app.listen(port, () => {
+    console.log(`Server running at http://116.124.191.174:${port}`);
 });
