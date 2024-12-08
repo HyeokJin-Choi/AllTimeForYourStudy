@@ -28,7 +28,29 @@ app.use(express.json());
 
 // 서버 동시 접속 방지
 const redis = require('redis');
-const client = redis.createClient(); // Redis 클라이언트 생성
+
+let redisClient;
+
+function initializeRedis() {
+  if (!redisClient) {
+    redisClient = redis.createClient();
+
+    redisClient.on('error', (err) => {
+      console.error('Redis Error:', err);
+    });
+
+    redisClient.on('connect', () => {
+      console.log('Connected to Redis');
+    });
+
+    redisClient.connect().catch((err) => {
+      console.error('Redis Connection Error:', err);
+    });
+  }
+  return redisClient;
+}
+
+module.exports = initializeRedis;
 
 // 월간 초기화 및 메달 수여 작업 (매월 1일 0시 실행)
 cron.schedule('0 0 1 * *', async () => {
@@ -356,49 +378,45 @@ app.post('/signup', (req, res) => {
 
 
 // 로그인 엔드포인트
+const initializeRedis = require('./redisClient');
+
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
 
-  const query = 'SELECT * FROM Users WHERE email = ? AND password = ?';
-  db.query(query, [email, password], (error, results) => {
-    if (error) {
-      console.error('쿼리 실행 실패:', error);
-      return res.status(500).json({ message: '서버 오류' });
-    }
+  try {
+    const redisClient = initializeRedis();
 
-    if (results.length > 0) {
-      const user = results[0];
-      const userId = results[0].id;
+    // 로그인 처리
+    const query = 'SELECT user_id FROM Users WHERE email = ? AND password = ?';
+    db.query(query, [email, password], async (err, results) => {
+      if (err) {
+        console.error('쿼리 실행 실패:', err);
+        return res.status(500).json({ message: '서버 오류' });
+      }
 
-      // Redis에서 로그인 상태 확인
-      client.get(`session:${userId}`, (err, session) => {
-          if (err) return res.status(500).json({ error: 'Redis 오류' });
-          if (session) return res.status(400).json({ error: '로그인 중인 아이디로 시도하였습니다.' });
+      if (results.length > 0) {
+        const user = results[0];
+        const userId = results[0].user_id;
 
-          // 새로운 세션 저장 (TTL 1시간)
-          const sessionToken = generateToken();
-          client.setex(`session:${userId}`, 3600, sessionToken);
-
-          res.status(200).json({ message: '로그인 성공', userId: user.email });
-      });
-      console.log(`로그인 성공: ${email}`);
-
-
-      // 마지막 로그인 시간 업데이트
-      const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
-      db.query(updateQuery, [email], (updateError) => {
-        if (updateError) {
-          console.error('마지막 로그인 시간 업데이트 실패:', updateError);
-          return res.status(500).json({ message: '서버 오류' });
+        // Redis 세션 확인
+        const sessionExists = await redisClient.get(`session:${userId}`);
+        if (sessionExists) {
+          return res.status(400).json({ error: '로그인 중인 아이디로 시도하였습니다.' });
         }
-      });
 
-       console.log('Returned user_id:', user.user_id);
-    } else {
-      console.log(`로그인 실패: 잘못된 자격 증명 ${email}`);
-      return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
-    }
-  });
+        // 새로운 세션 생성
+        await redisClient.setEx(`session:${userId}`, 3600, 'active');
+
+        return res.status(200).json({ message: '로그인 성공', userId });
+      } else {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+      console.log(`로그인 성공: ${email}`);
+    });
+  } catch (err) {
+    console.error('Error in /login:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // 로그아웃
