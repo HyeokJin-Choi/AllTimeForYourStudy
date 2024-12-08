@@ -26,6 +26,10 @@ db.connect((err) => {
 app.use(bodyParser.json());
 app.use(express.json());
 
+// 서버 동시 접속 방지
+const redis = require('redis');
+const client = redis.createClient(); // Redis 클라이언트 생성
+
 // 월간 초기화 및 메달 수여 작업 (매월 1일 0시 실행)
 cron.schedule('0 0 1 * *', async () => {
     try {
@@ -364,6 +368,19 @@ app.post('/login', (req, res) => {
 
     if (results.length > 0) {
       const user = results[0];
+      const userId = results[0].id;
+
+      // Redis에서 로그인 상태 확인
+      client.get(`session:${userId}`, (err, session) => {
+          if (err) return res.status(500).json({ error: 'Redis 오류' });
+          if (session) return res.status(400).json({ error: '로그인 중인 아이디로 시도하였습니다.' });
+
+          // 새로운 세션 저장 (TTL 1시간)
+          const sessionToken = generateToken();
+          client.setex(`session:${userId}`, 3600, sessionToken);
+
+          res.status(200).json({ message: '로그인 성공', userId: user.email });
+      });
       console.log(`로그인 성공: ${email}`);
 
 
@@ -377,16 +394,20 @@ app.post('/login', (req, res) => {
       });
 
        console.log('Returned user_id:', user.user_id);
-
-      // 사용자 ID를 응답으로 반환
-      return res.status(200).json({
-      user_id: user.user_id,
-      nickname: user.nickname,
-      message: '로그인 성공', userId: user.email });
     } else {
       console.log(`로그인 실패: 잘못된 자격 증명 ${email}`);
       return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
     }
+  });
+});
+
+// 로그아웃
+app.post('/logout', (req, res) => {
+  const { userId } = req.body;
+
+  client.del(`session:${userId}`, (err) => {
+      if (err) return res.status(500).json({ error: 'Redis 오류' });
+      res.status(200).json({ message: 'Logout successful' });
   });
 });
 
@@ -1264,20 +1285,39 @@ app.post('/accept-friend-request', (req, res) => {
 
       const userId = userResult[0].user_id;
 
-      // 3. 친구 수락 알림 생성 (user_id 포함)
-      const notificationMessage = `user${userId} 님이 친구 요청을 수락했습니다!`;  // 메시지에 user_id 포함
-      const notificationQuery = `
-        CALL CreateNotification(?, '새로운 친구 요청', ?, 'friend_request')
+      // 3. user_id를 통해 nickname 가져오기
+      const getNicknameQuery = `
+        SELECT nickname FROM Users
+        WHERE user_id = ?
       `;
 
-      db.query(notificationQuery, [userId, notificationMessage], (err, notificationResult) => {
+      db.query(getNicknameQuery, [userId], (err, nicknameResult) => {
         if (err) {
-          console.error('Error creating notification:', err);
-          return res.status(500).send({ message: '알림 생성 중 오류가 발생했습니다.' });
+          console.error('Error fetching nickname:', err);
+          return res.status(500).json({ message: '닉네임 정보를 가져오는 중 오류가 발생했습니다.' });
         }
 
-        // 4. 응답 전송
-        res.status(200).send({ message: '친구 요청이 성공적으로 수락되었습니다.' });
+        if (nicknameResult.length === 0) {
+          return res.status(404).json({ message: '닉네임을 찾을 수 없습니다.' });
+        }
+
+        const nickname = nicknameResult[0].nickname;
+
+        // 4. 친구 수락 알림 생성 (nickname 포함)
+        const notificationMessage = `${nickname} 님이 친구 요청을 수락했습니다!`;
+        const notificationQuery = `
+          CALL CreateNotification(?, '친구 요청 수락', ?, 'friend_request')
+        `;
+
+        db.query(notificationQuery, [userId, notificationMessage], (err, notificationResult) => {
+          if (err) {
+            console.error('Error creating notification:', err);
+            return res.status(500).send({ message: '알림 생성 중 오류가 발생했습니다.' });
+          }
+
+          // 5. 응답 전송
+          res.status(200).send({ message: '친구 요청이 성공적으로 수락되었습니다.' });
+        });
       });
     });
   });
@@ -1386,7 +1426,7 @@ app.post('/mark-notification-read', (req, res) => {
 
 // 서버 시작
 app.listen(port, () => {
-    console.log(`Server running at http://116.124.191.174:${port}`);
+    console.log(`Server running at http://http://116.124.191.174:${port}`);
 });
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
