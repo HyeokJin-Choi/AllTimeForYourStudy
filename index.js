@@ -637,7 +637,7 @@ app.post('/school-contributions', (req, res) => {
     ` : `
       SELECT u.nickname, s.monthly_time AS total_time
       FROM Users u
-      JOIN Studytimerecords s ON u.user_id = s.user_id
+      JOIN StudyTimeRecords s ON u.user_id = s.user_id
       WHERE u.school_name = ?
       ORDER BY s.monthly_time DESC
     `;
