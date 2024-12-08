@@ -737,7 +737,7 @@ app.post('/selected-school-competition', (req, res) => {
   const query = `
     SELECT u.nickname, s.monthly_time
     FROM Users u
-    JOIN Studytimerecords s ON u.user_id = s.user_id
+    JOIN StudyTimeRecords s ON u.user_id = s.user_id
     WHERE u.school_name = ?
     ORDER BY s.monthly_time DESC
   `;
