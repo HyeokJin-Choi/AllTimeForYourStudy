@@ -28,22 +28,16 @@ db.connect((err) => {
 });
 
 // 로그인 세션
-const session = require('express-session');
+const redis = require('redis');
+const redisClient = redis.createClient();
 
-// express-session 설정
-app.use(
-  session({
-    secret: 'your-secret-key', // 환경 변수로 관리 추천
-    resave: false, // 세션 데이터가 변경되지 않으면 저장하지 않음
-    saveUninitialized: false, // 초기화되지 않은 세션 저장하지 않음
-    cookie: {
-      secure: false, // HTTPS 환경에서는 true
-      httpOnly: true, // 클라이언트에서 JavaScript로 쿠키 접근 금지
-    },
-  })
-);
+redisClient.on('error', (err) => {
+  console.error('Redis 연결 실패:', err);
+});
 
-console.log('MemoryStore 기반 세션 관리가 설정되었습니다.');
+redisClient.connect().then(() => {
+  console.log('Redis 연결 성공');
+});
 
 
 // 미들웨어 설정
@@ -376,11 +370,11 @@ app.post('/signup', (req, res) => {
 });
 
 // 로그인 API
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   const query = 'SELECT * FROM Users WHERE email = ?';
-  db.query(query, [email], (error, results) => {
+  db.query(query, [email], async (error, results) => {
     if (error) {
       console.error('쿼리 실행 실패:', error);
       return res.status(500).json({ message: '서버 오류' });
@@ -389,54 +383,24 @@ app.post('/login', (req, res) => {
     if (results.length > 0) {
       const user = results[0];
 
-      // 이미 로그인된 사용자인지 확인
-      if (req.session.loggedInUserId === user.user_id) {
+      // 이미 로그인된 사용자 확인
+      const isLoggedIn = await redisClient.get(user.user_id);
+      if (isLoggedIn) {
         return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
       }
 
       // 해시된 비밀번호 확인
-      if (user.password.startsWith('$2b$')) {
-        bcrypt.compare(password, user.password, (err, isMatch) => {
-          if (err) {
-            console.error('비밀번호 비교 실패:', err);
-            return res.status(500).json({ message: '서버 오류' });
-          }
+      bcrypt.compare(password, user.password, async (err, isMatch) => {
+        if (err) {
+          console.error('비밀번호 비교 실패:', err);
+          return res.status(500).json({ message: '서버 오류' });
+        }
 
-          if (isMatch) {
-            console.log(`로그인 성공: ${email}`);
-
-            // 세션 초기화
-            req.session.loggedInUserId = user.user_id;
-            req.session.nickname = user.nickname;
-
-            // 마지막 로그인 시간 업데이트
-            const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
-            db.query(updateQuery, [email], (updateError) => {
-              if (updateError) {
-                console.error('마지막 로그인 시간 업데이트 실패:', updateError);
-                return res.status(500).json({ message: '서버 오류' });
-              }
-            });
-
-            return res.status(200).json({
-              user_id: user.user_id,
-              nickname: user.nickname,
-              message: '로그인 성공'
-            });
-          } else {
-            console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
-            return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
-          }
-        });
-      } else {
-        // 평문 비밀번호 처리 (추후 제거 추천)
-        if (password === user.password) {
-          // 이미 로그인된 사용자인지 확인
-          if (req.session.loggedInUserId === user.user_id) {
-            return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
-          }
-
+        if (isMatch) {
           console.log(`로그인 성공: ${email}`);
+
+          // Redis에 로그인 상태 저장 (TTL 1시간 설정)
+          await redisClient.set(user.user_id, 'loggedIn', { EX: 3600 });
 
           // 세션 초기화
           req.session.loggedInUserId = user.user_id;
@@ -454,13 +418,13 @@ app.post('/login', (req, res) => {
           return res.status(200).json({
             user_id: user.user_id,
             nickname: user.nickname,
-            message: '로그인 성공'
+            message: '로그인 성공',
           });
         } else {
           console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
           return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
         }
-      }
+      });
     } else {
       console.log(`로그인 실패: 존재하지 않는 이메일 ${email}`);
       return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
@@ -469,7 +433,17 @@ app.post('/login', (req, res) => {
 });
 
 // 로그아웃 API
-app.post('/logout', (req, res) => {
+app.post('/logout', async (req, res) => {
+  const userId = req.session.loggedInUserId;
+
+  if (!userId) {
+    return res.status(400).json({ message: '로그인되지 않은 사용자입니다.' });
+  }
+
+  // Redis에서 로그인 상태 제거
+  await redisClient.del(userId);
+
+  // 세션 제거
   req.session.destroy((err) => {
     if (err) {
       console.error('세션 삭제 실패:', err);
@@ -1526,6 +1500,12 @@ app.post('/mark-notification-read', (req, res) => {
 });
 
 
+
+
+// 서버 시작
+app.listen(port, () => {
+    console.log(`Server running at http://116.124.191.174:${port}`);
+});
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
 
@@ -1560,9 +1540,4 @@ app.get('/friends/:userId', (req, res) => {
     // 정상적인 결과 반환
     res.status(200).json(results);
   });
-});
-
-// 서버 시작
-app.listen(port, () => {
-    console.log(`Server running at http://116.124.191.174:${port}`);
 });
