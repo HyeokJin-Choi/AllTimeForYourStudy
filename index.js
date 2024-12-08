@@ -631,7 +631,7 @@ app.post('/school-contributions', (req, res) => {
     const contributionsQuery = isTotalTime ? `
       SELECT u.nickname, s.total_time
       FROM Users u
-      JOIN Studytimerecords s ON u.user_id = s.user_id
+      JOIN StudyTimeRecords s ON u.user_id = s.user_id
       WHERE u.school_name = ?
       ORDER BY s.total_time DESC
     ` : `
