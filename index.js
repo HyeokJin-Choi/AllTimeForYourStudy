@@ -9,7 +9,7 @@ const bcrypt = require('bcrypt');
 const saltRounds = 10; // Salt rounds 값은 보안성에 영향을 미칩니다.
 
 const app = express();
-    const port = 15023;
+const port = 15023;
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
@@ -368,14 +368,42 @@ app.post('/login', (req, res) => {
     if (results.length > 0) {
       const user = results[0];
 
-      // bcrypt.compare로 해시된 비밀번호와 입력된 비밀번호 비교
-      bcrypt.compare(password, user.password, (err, isMatch) => {
-        if (err) {
-          console.error('비밀번호 비교 실패:', err);
-          return res.status(500).json({ message: '서버 오류' });
-        }
+      // 해시된 비밀번호인지 평문 비밀번호인지 체크하는 로직
+      if (user.password.startsWith('$2b$')) {
+        // 비밀번호가 bcrypt로 해시된 경우
+        bcrypt.compare(password, user.password, (err, isMatch) => {
+          if (err) {
+            console.error('비밀번호 비교 실패:', err);
+            return res.status(500).json({ message: '서버 오류' });
+          }
 
-        if (isMatch) {
+          if (isMatch) {
+            console.log(`로그인 성공: ${email}`);
+
+            // 마지막 로그인 시간 업데이트
+            const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
+            db.query(updateQuery, [email], (updateError) => {
+              if (updateError) {
+                console.error('마지막 로그인 시간 업데이트 실패:', updateError);
+                return res.status(500).json({ message: '서버 오류' });
+              }
+            });
+
+            // 로그인 성공, 사용자 ID와 닉네임 반환
+            return res.status(200).json({
+              user_id: user.user_id,
+              nickname: user.nickname,
+              message: '로그인 성공',
+              userId: user.email
+            });
+          } else {
+            console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
+            return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
+          }
+        });
+      } else {
+        // 평문 비밀번호인 경우 (단순 비교)
+        if (password === user.password) {
           console.log(`로그인 성공: ${email}`);
 
           // 마지막 로그인 시간 업데이트
@@ -398,7 +426,7 @@ app.post('/login', (req, res) => {
           console.log(`로그인 실패: 잘못된 비밀번호 ${email}`);
           return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
         }
-      });
+      }
     } else {
       console.log(`로그인 실패: 존재하지 않는 이메일 ${email}`);
       return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
@@ -1452,6 +1480,12 @@ app.post('/mark-notification-read', (req, res) => {
 });
 
 
+
+
+// 서버 시작
+app.listen(port, () => {
+    console.log(`Server running at http://116.124.191.174:${port}`);
+});
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
 
@@ -1486,10 +1520,4 @@ app.get('/friends/:userId', (req, res) => {
     // 정상적인 결과 반환
     res.status(200).json(results);
   });
-});
-
-
-// 서버 시작
-app.listen(port, () => {
-    console.log(`Server running at http://116.124.191.174:${port}`);
 });
