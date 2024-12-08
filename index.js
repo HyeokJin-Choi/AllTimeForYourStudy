@@ -1426,7 +1426,7 @@ app.post('/mark-notification-read', (req, res) => {
 
 // 서버 시작
 app.listen(port, () => {
-    console.log(`Server running at http://http://116.124.191.174:${port}`);
+    console.log(`Server running at http://116.124.191.174:${port}`);
 });
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
