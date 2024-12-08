@@ -1452,12 +1452,6 @@ app.post('/mark-notification-read', (req, res) => {
 });
 
 
-
-
-// 서버 시작
-app.listen(port, () => {
-    console.log(`Server running at http://116.124.191.174:${port}`);
-});
 app.get('/friends/:userId', (req, res) => {
   const { userId } = req.params;
 
@@ -1492,4 +1486,10 @@ app.get('/friends/:userId', (req, res) => {
     // 정상적인 결과 반환
     res.status(200).json(results);
   });
+});
+
+
+// 서버 시작
+app.listen(port, () => {
+    console.log(`Server running at http://116.124.191.174:${port}`);
 });
