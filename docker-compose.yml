@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:5.7
+    container_name: mysql_server
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: checkjin_2023874
+      MYSQL_USER: checkjin_2023874
+      MYSQL_PASSWORD: checkjin_2023874
+    ports:
+      - "3306:3306"
+  
+  app:
+    build: .
+    container_name: app_server
+    ports:
+      - "15023:15023"
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: checkjin_2023874
+      DB_PASSWORD: checkjin_2023874
+      DB_NAME: checkjin_2023874
