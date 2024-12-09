@@ -13,7 +13,7 @@ const app = express();
 const port = 15023;
 // MySQL 연결 설정
 const db = mysql.createConnection({
-  host: process.env.DB_HOST || 'localhost', // MySQL 컨테이너 이름
+  host: process.env.DB_HOST || 'db', // MySQL 컨테이너 이름
   user: process.env.DB_USER || 'checkjin_2023874',
   password: process.env.DB_PASSWORD || 'checkjin_2023874',
   database: process.env.DB_NAME || 'checkjin_2023874',
