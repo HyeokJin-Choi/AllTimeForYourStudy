@@ -29,15 +29,34 @@ db.connect((err) => {
 
 // 로그인 세션
 const redis = require('redis');
-const redisClient = redis.createClient();
-
-redisClient.on('error', (err) => {
-  console.error('Redis 연결 실패:', err);
+// Redis 연결 설정
+const redisClient = redis.createClient({
+  url: `redis://default:DaEPvJcFiv7V75JSHaNaptAj1zaD16P7@redis-12810.c258.us-east-1-4.ec2.redns.redis-cloud.com:12810/0`,
 });
 
-redisClient.connect().then(() => {
+redisClient.on('connect', () => {
   console.log('Redis 연결 성공');
 });
+redisClient.on('ready', () => {
+  console.log('Redis 준비 완료');
+});
+redisClient.on('end', () => {
+  console.log('Redis 연결 종료');
+});
+redisClient.on('error', (err) => {
+  console.error('Redis 에러 발생:', err);
+});
+
+(async () => {
+  try {
+    await redisClient.connect();
+    console.log('Redis 연결 시도 중...');
+    await redisClient.flushAll();
+    console.log('Redis 초기화 완료');
+  } catch (err) {
+    console.error('Redis 연결 실패:', err);
+  }
+})();
 
 
 // 미들웨어 설정
@@ -383,13 +402,7 @@ app.post('/login', async (req, res) => {
     if (results.length > 0) {
       const user = results[0];
 
-      // 이미 로그인된 사용자 확인
-      const isLoggedIn = await redisClient.get(user.user_id);
-      if (isLoggedIn) {
-        return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
-      }
-
-      // 해시된 비밀번호 확인
+      // 비밀번호 비교
       bcrypt.compare(password, user.password, async (err, isMatch) => {
         if (err) {
           console.error('비밀번호 비교 실패:', err);
@@ -397,24 +410,33 @@ app.post('/login', async (req, res) => {
         }
 
         if (isMatch) {
-          console.log(`로그인 성공: ${email}`);
+          // Redis에서 로그인 상태 확인
+          const userId = user.user_id.toString(); // 키를 문자열로 변환
+          const isLoggedIn = await redisClient.get(userId);
+          if (isLoggedIn) {
+            return res.status(400).json({ message: '이미 로그인된 사용자입니다.' });
+          }
 
-          // Redis에 로그인 상태 저장 (TTL 1시간 설정)
-          await redisClient.set(user.user_id, 'loggedIn', { EX: 3600 });
-
-          // 세션 초기화
-          req.session.loggedInUserId = user.user_id;
-          req.session.nickname = user.nickname;
-
-          // 마지막 로그인 시간 업데이트
-          const updateQuery = 'UPDATE Users SET last_login = NOW() WHERE email = ?';
-          db.query(updateQuery, [email], (updateError) => {
-            if (updateError) {
-              console.error('마지막 로그인 시간 업데이트 실패:', updateError);
-              return res.status(500).json({ message: '서버 오류' });
+          try {
+            // Redis 데이터 저장 시
+            const status = 'loggedIn';
+            const result = await redisClient.set(userId, status, { EX: 3600 });
+            console.log(`Redis SET 결과: ${result}`);
+            if (result !== 'OK') {
+              console.error('Redis SET 실패:', userId);
             }
-          });
+            console.log(`Redis에 저장됨: key=${userId}, value=${status}`);
 
+            // 데이터가 제대로 저장되었는지 바로 확인
+            const redisValue = await redisClient.get(userId);
+            console.log(`Redis에서 조회: key=${userId}, value=${redisValue}`);
+
+            console.log('Redis SET 성공');
+            console.log('로그인 성공:', userId);
+          } catch (err) {
+            console.error('Redis 연결 실패:', err);
+          }
+          
           return res.status(200).json({
             user_id: user.user_id,
             nickname: user.nickname,
@@ -434,24 +456,26 @@ app.post('/login', async (req, res) => {
 
 // 로그아웃 API
 app.post('/logout', async (req, res) => {
-  const userId = req.session.loggedInUserId;
+  const { userId } = req.body;
 
   if (!userId) {
-    return res.status(400).json({ message: '로그인되지 않은 사용자입니다.' });
+    return res.status(400).json({ message: '사용자 ID가 필요합니다.' });
   }
 
-  // Redis에서 로그인 상태 제거
-  await redisClient.del(userId);
-
-  // 세션 제거
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('세션 삭제 실패:', err);
-      return res.status(500).json({ message: '로그아웃 실패' });
+  try {
+    // Redis에서 사용자 로그인 상태 제거
+    const result = await redisClient.del(userId.toString());
+    if (result === 1) {
+      console.log(`Redis에서 로그아웃 처리 완료: key=${userId}`);
+      return res.status(200).json({ message: '로그아웃 성공' });
+    } else {
+      console.log(`Redis에서 키를 찾을 수 없음: key=${userId}`);
+      return res.status(404).json({ message: '사용자가 로그인되어 있지 않습니다.' });
     }
-
-    res.status(200).json({ message: '로그아웃 성공' });
-  });
+  } catch (err) {
+    console.error('Redis에서 로그아웃 처리 실패:', err);
+    return res.status(500).json({ message: '로그아웃 실패' });
+  }
 });
 
 // get-school-name 엔드포인트
