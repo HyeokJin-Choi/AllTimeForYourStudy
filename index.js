@@ -10,7 +10,7 @@ const bcrypt = require('bcrypt');
 const saltRounds = 10; // Salt rounds 값은 보안성에 영향을 미칩니다.
 
 const app = express();
-const port = 15032;
+const port = 15023;
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
