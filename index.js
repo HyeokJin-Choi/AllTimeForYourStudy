@@ -14,7 +14,7 @@ const port = 3306;
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
-    host: 'localhost',
+    host: '116.124.191.174',
     user: 'checkjin_2023874', // MySQL 사용자명
     password: 'checkjin_2023874', // MySQL 비밀번호
     database: 'checkjin_2023874', // 사용할 데이터베이스
