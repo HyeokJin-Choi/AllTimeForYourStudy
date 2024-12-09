@@ -18,8 +18,7 @@ const db = mysql.createConnection({
     user: 'checkjin_2023874', // MySQL 사용자명
     password: 'checkjin_2023874', // MySQL 비밀번호
     database: 'checkjin_2023874', // 사용할 데이터베이스
-    multipleStatements: true, // 여기에 추가
-    connectTimeout: 60000
+    multipleStatements: true // 여기에 추가
 });
 
 // MySQL 연결
