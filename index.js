@@ -14,14 +14,13 @@ const port = 15023;
 
 // MySQL 연결 설정
 const db = mysql.createConnection({
-    host: '116.124.191.174',
+    host: '0.0.0.0',
     user: 'checkjin_2023874', // MySQL 사용자명
     password: 'checkjin_2023874', // MySQL 비밀번호
     database: 'checkjin_2023874', // 사용할 데이터베이스
     port: 15023,
     multipleStatements: true // 여기에 추가
 });
-
 
 // MySQL 연결
 db.connect((err) => {
@@ -312,7 +311,7 @@ app.post('/signup', (req, res) => {
   const { email, password, nickname, school_name } = req.body;
 
   if (!email || !password || !nickname || !school_name) {
-    return res.status(400).json({ message: '이메일, 비밀번호, 닉네임, 학교명 입력은 필수입니다.' });
+    return res.status(400).json({ message: 'Email, password, nickname, and school_name are required' });
   }
 
   bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
@@ -331,7 +330,7 @@ app.post('/signup', (req, res) => {
         }
         if (result.length > 0) {
           db.rollback();
-          return res.status(400).json({ message: '이메일이 이미 존재합니다.' });
+          return res.status(400).json({ message: 'Email is already taken' });
         }
 
         db.query('SELECT nickname FROM Users WHERE nickname = ?', [nickname], (err, result) => {
@@ -341,7 +340,7 @@ app.post('/signup', (req, res) => {
           }
           if (result.length > 0) {
             db.rollback();
-            return res.status(400).json({ message: '닉네임이 이미 존재합니다.' });
+            return res.status(400).json({ message: 'Nickname is already taken' });
           }
 
           db.query('SELECT school_id FROM School WHERE school_name = ?', [school_name], (err, result) => {
@@ -403,7 +402,7 @@ app.post('/login', async (req, res) => {
 
     if (results.length > 0) {
       const user = results[0];
-
+      
       // 해시된 비밀번호인지 평문 비밀번호인지 체크하는 로직
       if (user.password.startsWith('$2b$')) {
         // 비밀번호 비교
@@ -449,7 +448,7 @@ app.post('/login', async (req, res) => {
             } catch (err) {
               console.error('Redis 연결 실패:', err);
             }
-
+            
             return res.status(200).json({
               user_id: user.user_id,
               nickname: user.nickname,
@@ -498,7 +497,7 @@ app.post('/login', async (req, res) => {
           } catch (err) {
             console.error('Redis 연결 실패:', err);
           }
-
+          
           return res.status(200).json({
             user_id: user.user_id,
             nickname: user.nickname,
@@ -509,7 +508,7 @@ app.post('/login', async (req, res) => {
           return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
         }
       }
-
+      
     } else {
       console.log(`로그인 실패: 존재하지 않는 이메일 ${email}`);
       return res.status(401).json({ message: '잘못된 이메일 또는 비밀번호' });
