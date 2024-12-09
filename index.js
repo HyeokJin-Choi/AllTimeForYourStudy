@@ -13,12 +13,12 @@ const app = express();
 const port = 15023;
 // MySQL 연결 설정
 const db = mysql.createConnection({
-    host: '0.0.0.0',
-    user: 'checkjin_2023874', // MySQL 사용자명
-    password: 'checkjin_2023874', // MySQL 비밀번호
-    database: 'checkjin_2023874', // 사용할 데이터베이스
-    port: 15023,
-    multipleStatements: true // 여기에 추가
+  host: process.env.DB_HOST || 'localhost', // MySQL 컨테이너 이름
+  user: process.env.DB_USER || 'checkjin_2023874',
+  password: process.env.DB_PASSWORD || 'checkjin_2023874',
+  database: process.env.DB_NAME || 'checkjin_2023874',
+  port: process.env.DB_PORT || 3306,
+  multipleStatements: true,
 });
 
 // MySQL 연결
